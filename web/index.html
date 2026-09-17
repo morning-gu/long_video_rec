@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>长视频推荐 Demo</title>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --bg-panel: #17171a;
+    --bg-card: #1b1b1f;
+    --bg-hover: #232329;
+    --border: #2a2a30;
+    --border-soft: #222227;
+    --text: #ececec;
+    --text-dim: #9a9aa2;
+    --text-faint: #6b6b74;
+    --accent: #e50914;
+    --accent-soft: rgba(229, 9, 20, .14);
+    --ai: #8b5cf6;
+    --ai-soft: rgba(139, 92, 246, .15);
+    --good: #4ade80;
+    --warn: #f4b04a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scrollbar-color: #3a3a42 transparent; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #34343c; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #45454f; }
+
+  /* ---------- 顶栏 ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(20,20,24,.98), rgba(14,14,16,.96));
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 14px 28px 12px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand h1 { font-size: 19px; font-weight: 700; letter-spacing: .5px; }
+  .brand h1 .dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+    background: linear-gradient(135deg, var(--accent), #ff5a4a);
+    margin-right: 9px; transform: translateY(-1px);
+  }
+  .brand .sub { font-size: 12px; color: var(--text-faint); letter-spacing: .3px; }
+
+  .controls {
+    display: flex; gap: 10px; margin-top: 13px; flex-wrap: wrap; align-items: center;
+  }
+  select, input, button {
+    background: var(--bg-panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; outline: none;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  select:focus, input:focus {
+    border-color: #5a5a66;
+    box-shadow: 0 0 0 3px rgba(120, 120, 140, .12);
+  }
+  input[type=number] { width: 150px; }
+  button { cursor: pointer; }
+  button:hover { background: var(--bg-hover); }
+
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 8px 14px; color: var(--text-dim); }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+
+  #llmToggle.on {
+    background: var(--ai-soft); border-color: var(--ai); color: #c4b0f5;
+  }
+  #refresh { font-weight: 600; padding: 8px 16px; }
+
+  .profile {
+    margin-top: 12px; font-size: 12px; color: var(--text-faint);
+    display: flex; gap: 7px; flex-wrap: wrap; align-items: center; max-width: 100%;
+  }
+  .profile .chip {
+    background: var(--bg-panel); border: 1px solid var(--border-soft);
+    border-radius: 20px; padding: 3px 11px; color: var(--text-dim);
+    max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ---------- 行 ---------- */
+  main { padding: 22px 28px 70px; }
+  section { margin-bottom: 34px; animation: rise .35s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  section h2 {
+    font-size: 15px; font-weight: 700; letter-spacing: .3px;
+    margin-bottom: 13px; display: flex; align-items: center; gap: 10px;
+  }
+  section h2::before {
+    content: ""; width: 4px; height: 16px; border-radius: 2px;
+    background: linear-gradient(180deg, var(--accent), #ff6a4a);
+  }
+  section h2 .note {
+    font-size: 12px; color: var(--warn); font-weight: 500;
+    background: rgba(244, 176, 74, .1); border-radius: 6px; padding: 2px 8px;
+  }
+  #llmStatus {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    display: none; align-items: center; gap: 6px; font-weight: 500;
+  }
+  #llmStatus.pending { display: inline-flex; background: var(--ai-soft); color: #b9a3f2; }
+  #llmStatus.pending::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ai); animation: pulse 1s infinite;
+  }
+  @keyframes pulse { 50% { opacity: .25; } }
+  #llmStatus.done { display: inline-flex; background: rgba(74, 222, 128, .12); color: var(--good); }
+  #llmStatus.fallback { display: inline-flex; background: rgba(154, 154, 162, .12); color: var(--text-dim); }
+
+  .row { display: flex; gap: 13px; overflow-x: auto; padding: 4px 2px 12px; }
+
+  /* ---------- 卡片 ---------- */
+  .card {
+    min-width: 170px; max-width: 170px; flex-shrink: 0;
+    border-radius: var(--radius); padding: 9px;
+    background: var(--bg-card); border: 1px solid var(--border-soft);
+    cursor: pointer; position: relative;
+    transition: transform .18s ease, border-color .18s, box-shadow .18s, background .18s;
+  }
+  .card:hover {
+    transform: translateY(-5px);
+    border-color: #4a4a55;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .55);
+    background: var(--bg-hover);
+  }
+  .card .poster {
+    position: relative; height: 242px; border-radius: 7px; overflow: hidden;
+    background: linear-gradient(160deg, #232329, #151518);
+    margin-bottom: 9px;
+  }
+  .card .poster .ph {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 700; color: rgba(255, 255, 255, .5);
+    text-align: center; padding: 0 10px;
+  }
+  .card .poster img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0; transition: opacity .4s ease;
+  }
+  .card .poster img.loaded { opacity: 1; }
+  .card .no {
+    position: absolute; top: 7px; right: 7px; z-index: 2;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(0, 0, 0, .62); color: #bbb; border: none;
+    font-size: 12px; line-height: 1; padding: 0;
+    opacity: 0; transition: opacity .15s, color .15s;
+    backdrop-filter: blur(4px);
+  }
+  .card:hover .no { opacity: 1; }
+  .card .no:hover { color: var(--accent); background: rgba(0, 0, 0, .85); }
+
+  .card .title {
+    font-size: 13px; font-weight: 600; line-height: 1.4; height: 36px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card .genres {
+    font-size: 11px; color: var(--text-faint); margin-top: 5px; height: 16px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .card .reason {
+    font-size: 11.5px; color: #d9b877; margin-top: 6px; height: 32px;
+    line-height: 1.42; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .card .meta {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 8px; font-size: 11px;
+  }
+  .card .score {
+    color: var(--good); font-weight: 700;
+    background: rgba(74, 222, 128, .1); padding: 1px 7px; border-radius: 5px;
+  }
+  .badge { padding: 1px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 600; }
+  .badge.itemcf   { background: rgba(96, 165, 250, .13); color: #7cb6ff; }
+  .badge.twotower { background: rgba(167, 139, 250, .13); color: #b9a3f2; }
+  .badge.sasrec   { background: rgba(45, 212, 191, .13); color: #4fd8c3; }
+  .badge.hot      { background: rgba(244, 176, 74, .13); color: var(--warn); }
+  .badge.cold     { background: rgba(244, 114, 182, .13); color: #f29ec5; }
+  .badge.query    { background: rgba(129, 140, 248, .15); color: #a5b0ff; }
+
+  #queryInput { width: 230px; }
+  .navlink {
+    text-decoration: none; font-size: 13px; color: var(--text-dim);
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+    transition: border-color .15s, color .15s;
+  }
+  .navlink:hover { color: var(--text); border-color: #5a5a66; }
+  #cmpToggle.on { background: rgba(74, 222, 128, .12); border-color: #3f7a52; color: #7ee09a; }
+
+  /* 对比模式 */
+  .cmp {
+    background: var(--bg-panel); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 14px 18px; margin-bottom: 22px;
+    animation: rise .35s ease both;
+  }
+  .cmp-title { font-size: 14px; font-weight: 700; margin-bottom: 11px; }
+  .cmp-title .note {
+    font-size: 12px; color: var(--text-faint); font-weight: 400; margin-left: 8px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+  .chips .chip {
+    border-radius: 20px; padding: 4px 12px;
+    background: var(--bg-card); border: 1px solid var(--border-soft);
+    color: var(--text-dim);
+  }
+  .chips .chip.a { border-color: rgba(229, 9, 20, .55); color: #ff9a93; }
+  .chips .chip.b { border-color: #3d3d46; }
+  .chips .chip.a b, .chips .chip.b b { font-size: 13px; }
+  .clearq {
+    margin-left: auto; font-size: 11px; color: var(--text-faint);
+    background: none; border: 1px solid var(--border-soft); border-radius: 12px;
+    padding: 2px 10px;
+  }
+  .clearq:hover { color: var(--text); border-color: #5a5a66; }
+
+  /* ---------- 骨架屏 ---------- */
+  .sk-card {
+    min-width: 170px; height: 385px; flex-shrink: 0;
+    border-radius: var(--radius); background: var(--bg-card);
+    border: 1px solid var(--border-soft); padding: 9px;
+  }
+  .sk-card .sk { border-radius: 7px; background: linear-gradient(100deg, #202026 40%, #2a2a33 50%, #202026 60%); background-size: 200% 100%; animation: shimmer 1.2s infinite linear; }
+  .sk-card .sk.p { height: 242px; margin-bottom: 9px; }
+  .sk-card .sk.t { height: 14px; width: 88%; margin-bottom: 7px; }
+  .sk-card .sk.g { height: 11px; width: 60%; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ---------- 其他 ---------- */
+  #toast {
+    position: fixed; right: 22px; bottom: 22px; z-index: 30;
+    background: #232a23; border: 1px solid #365536; color: #9fe0a2;
+    padding: 11px 17px; border-radius: 9px; font-size: 13px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .25s, transform .25s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: none; }
+
+  @media (max-width: 760px) {
+    header { padding: 12px 16px 10px; }
+    main { padding: 16px 16px 60px; }
+    .brand .sub { display: none; }
+    .card, .sk-card { min-width: 138px; max-width: 138px; }
+    .card .poster, .sk-card .sk.p { height: 196px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1><span class="dot"></span>长视频推荐 Demo</h1>
+    <span class="sub">四段漏斗 · LLM 增强 · 实时回流 · 消融对照</span>
+  </div>
+  <div class="controls">
+    <input id="queryInput" type="text" placeholder="来部轻松的科幻片…" maxlength="60">
+    <button id="queryBtn" title="自然语言查询（LLM 解析 → 类型过滤 + 双塔检索）">🔍 查询</button>
+    <select id="userSel"></select>
+    <input id="userInput" type="number" placeholder="自定义 user_id" min="1">
+    <div class="seg">
+      <button id="modeFull" class="on">完整链路</button>
+      <button id="modePopular">纯热门</button>
+    </div>
+    <button id="llmToggle" class="on" title="LLM 重排 + 推荐理由（失败自动降级）">✨ LLM 增强</button>
+    <button id="cmpToggle" title="同屏对比：完整链路 vs 纯热门（O3 消融）">⚖️ 对比</button>
+    <button id="refresh">↻ 刷新</button>
+    <a class="navlink" href="/eval" target="_blank" title="离线评测报告">📊 评测报告</a>
+  </div>
+  <div id="profile" class="profile"></div>
+</header>
+<main id="rows"></main>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let curUser = null, curMode = 'full', llmOn = true, compareOn = false;
+let lastTopIds = [], llmSeq = 0, queryResult = null;
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const SRC_NAME = {itemcf:'ItemCF', twotower:'双塔', sasrec:'序列',
+                  hot:'热门', cold:'冷门', query:'查询'};
+const srcName = s => SRC_NAME[s] || s;
+
+async function loadUsers() {
+  const r = await (await fetch('/api/users')).json();
+  $('userSel').innerHTML = r.sample_users.map(u =>
+    `<option value="${u.user_id}">用户 ${u.user_id}（${u.positives} 部正反馈）</option>`).join('');
+  curUser = r.sample_users[0].user_id;
+}
+
+function showSkeleton() {
+  const sk = `<div class="sk-card"><div class="sk p"></div><div class="sk t"></div><div class="sk g"></div></div>`;
+  const row = () => `<section><h2>加载中…</h2><div class="row">${sk.repeat(8)}</div></section>`;
+  $('rows').innerHTML = row() + row() + row('');
+}
+
+function renderProfile(profile) {
+  $('profile').innerHTML = (profile.recent || []).length
+    ? '<span>最近看过：</span>' +
+      profile.recent.map(t => `<span class="chip">${esc(t)}</span>`).join('')
+    : '<span class="chip">暂无历史（冷启动用户）</span>';
+}
+
+function rowHTML(row) {
+  return `<section>
+    <h2>${esc(row.title)}
+        ${row.note ? `<span class="note">${esc(row.note)}</span>` : ''}
+        ${row.key === 'for_you' ? '<span id="llmStatus"></span>' : ''}
+        ${row.clear ? '<button class="clearq" onclick="clearQuery()">✕ 清除</button>' : ''}
+    </h2>
+    <div class="row" ${row.key === 'for_you' ? 'id="forYouRow"' : ''}>
+      ${row.movies.map(card).join('')}
+    </div>
+  </section>`;
+}
+
+function querySection() {
+  const q = queryResult;
+  const g = q.genres.length ? q.genres.join(' / ') : '未识别 · 热度兜底';
+  return {key: 'query', clear: true, title: `🔍「${q.text}」`,
+          note: `${g}${q.mood ? ' · ' + esc(q.mood) : ''}${q.degraded ? ' · 解析降级' : ''}`,
+          movies: q.movies};
+}
+
+async function refresh() {
+  if (curUser == null) return;
+  showSkeleton();
+  try {
+    if (compareOn) await refreshCompare();
+    else await refreshNormal();
+  } catch (e) {
+    $('rows').innerHTML = '<section><h2>加载失败，请刷新重试</h2></section>';
+  }
+}
+
+async function refreshNormal() {
+  const r = await (await fetch(`/api/recommend?user_id=${curUser}&mode=${curMode}`)).json();
+  renderProfile(r.profile);
+  const sections = queryResult ? [querySection(), ...r.rows] : r.rows;
+  $('rows').innerHTML = sections.map(rowHTML).join('');
+  lastTopIds = r.rows[0].movies.map(m => m.movie_id);
+  if (llmOn && curMode === 'full') llmEnhance();
+}
+
+async function refreshCompare() {
+  const r = await (await fetch(`/api/compare?user_id=${curUser}`)).json();
+  renderProfile(r.profile);
+  const m = r.metrics;
+  const pct = x => (x * 100).toFixed(0) + '%';
+  const bar = `<section class="cmp">
+    <div class="cmp-title">同屏对比 · 同一用户同一时刻
+      <span class="note">O3 消融：红色为完整链路指标</span></div>
+    <div class="chips">
+      <span class="chip a">类型覆盖 <b>${m.full.genre_diversity}</b> vs <b>${m.popular.genre_diversity}</b></span>
+      <span class="chip a">长尾占比 <b>${pct(m.full.longtail)}</b> vs <b>${pct(m.popular.longtail)}</b></span>
+      <span class="chip a">平均口碑 <b>${m.full.avg_wr}</b> vs <b>${m.popular.avg_wr}</b></span>
+      <span class="chip b">两列表重合 <b>${m.overlap}/20</b></span>
+    </div>
+  </section>`;
+  $('rows').innerHTML =
+    (queryResult ? rowHTML(querySection()) : '') + bar +
+    rowHTML({key: 'for_you', title: '完整链路（个性化）',
+             note: '四段漏斗 + LLM 增强', movies: r.full}) +
+    rowHTML({key: 'popular', title: '纯热门（非个性化）',
+             note: '消融基线', movies: r.popular});
+  lastTopIds = r.full.map(m => m.movie_id);
+  if (llmOn) llmEnhance();
+}
+
+async function doQuery() {
+  const t = $('queryInput').value.trim();
+  if (!t || curUser == null) return;
+  $('queryInput').value = '';
+  const r = await (await fetch('/api/query', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: curUser, text: t})
+  })).json();
+  queryResult = r;
+  refresh();
+}
+
+function clearQuery() {
+  queryResult = null;
+  refresh();
+}
+
+function card(m) {
+  const hue = (m.movie_id * 47) % 360;
+  const g = m.genres[0] || '—';
+  const poster = m.poster
+    ? `<img src="${esc(m.poster)}" loading="lazy" alt=""
+             onload="this.classList.add('loaded')" onerror="this.remove()">`
+    : '';
+  return `<div class="card" data-id="${m.movie_id}"
+              title="${esc(m.title)}&#10;点击记为已看，推荐将实时更新">
+    <div class="poster">
+      <button class="no" title="不感兴趣（负反馈）">✕</button>
+      <div class="ph" style="background:linear-gradient(155deg,hsl(${hue},32%,26%),hsl(${hue},20%,12%))">${esc(g)}</div>
+      ${poster}
+    </div>
+    <div class="title">${esc(m.title)}</div>
+    <div class="genres">${esc(m.genres.join(' · '))}</div>
+    <div class="reason" id="rs-${m.movie_id}"></div>
+    <div class="meta">
+      <span class="score">${m.score.toFixed(2)}</span>
+      <span class="badge ${esc(m.source)}">${srcName(m.source)}</span>
+    </div>
+  </div>`;
+}
+
+// ---- LLM 增强（异步，主链路零依赖）----
+
+async function llmEnhance() {
+  const seq = ++llmSeq;
+  const st = $('llmStatus');
+  if (!st) return;
+  st.className = 'pending';
+  st.textContent = 'AI 增强中…';
+  try {
+    const r = await (await fetch('/api/llm_enhance', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: curUser, movie_ids: lastTopIds})
+    })).json();
+    if (seq !== llmSeq || !document.getElementById('forYouRow')) return; // 过期响应
+    const cards = {};
+    document.querySelectorAll('#forYouRow .card')
+      .forEach(el => cards[el.dataset.id] = el);
+    if (r.order && r.order.length) {
+      const row = document.getElementById('forYouRow');
+      r.order.forEach(id => { if (cards[id]) row.appendChild(cards[id]); });
+    }
+    for (const [id, text] of Object.entries(r.reasons || {})) {
+      const el = document.getElementById('rs-' + id);
+      if (el) el.textContent = '✨ ' + text;
+    }
+    if (r.degraded) { st.className = 'fallback'; st.textContent = 'AI 降级 · 模型排序'; }
+    else { st.className = 'done'; st.textContent = '✓ AI 已增强'; }
+  } catch (e) {
+    if (seq !== llmSeq) return;
+    st.className = 'fallback';
+    st.textContent = 'AI 不可用 · 已降级';
+  }
+}
+
+async function postEvent(movieId, action) {
+  await fetch('/api/event', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: curUser, movie_id: movieId, action})
+  });
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+document.addEventListener('click', async e => {
+  const no = e.target.closest('.no');
+  if (no) {
+    e.stopPropagation();
+    await postEvent(+no.closest('.card').dataset.id, 'dislike');
+    toast('已记录负反馈，推荐已实时更新');
+    refresh();
+    return;
+  }
+  const c = e.target.closest('.card');
+  if (c) {
+    await postEvent(+c.dataset.id, 'click');
+    toast('已记录点击，推荐已实时更新');
+    refresh();
+  }
+});
+
+function setMode(m) {
+  curMode = m;
+  $('modeFull').classList.toggle('on', m === 'full');
+  $('modePopular').classList.toggle('on', m === 'popular');
+  refresh();
+}
+$('modeFull').onclick = () => setMode('full');
+$('modePopular').onclick = () => setMode('popular');
+$('llmToggle').onclick = () => {
+  llmOn = !llmOn;
+  $('llmToggle').classList.toggle('on', llmOn);
+  if (!llmOn) {
+    const st = $('llmStatus');
+    if (st) { st.className = ''; st.textContent = ''; }
+    document.querySelectorAll('.reason').forEach(el => el.textContent = '');
+    llmSeq++;   // 使在途响应过期
+  } else {
+    refresh();
+  }
+};
+$('cmpToggle').onclick = () => {
+  compareOn = !compareOn;
+  $('cmpToggle').classList.toggle('on', compareOn);
+  refresh();
+};
+$('queryBtn').onclick = doQuery;
+$('queryInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doQuery();
+});
+$('refresh').onclick = refresh;
+$('userSel').onchange = () => { curUser = +$('userSel').value;
+                               $('userInput').value = ''; refresh(); };
+$('userInput').onchange = () => {
+  const v = +$('userInput').value;
+  if (v > 0) { curUser = v; refresh(); }
+};
+
+loadUsers().then(refresh);
+</script>
+</body>
+</html>

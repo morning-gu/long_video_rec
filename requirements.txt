@@ -1,0 +1,10 @@
+# M1–M4 依赖
+fastapi
+uvicorn[standard]
+numpy
+pandas
+pyarrow
+scipy
+torch
+faiss-cpu
+openai

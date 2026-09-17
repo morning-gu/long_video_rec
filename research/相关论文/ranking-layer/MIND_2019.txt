@@ -1,0 +1,677 @@
+Multi-Interest Network with Dynamic Routing for
+Recommendation at Tmall
+ChaoLi∗ MengmengWu HuanZhao
+ZhiyuanLiu∗ YuchiXu hzhaoaf@cse.ust.hk
+{ruide.lc,michong.lzy}@alibaba-inc.com PipeiHuang† DepartmentofComputerScienceand
+AlibabaGroup {max.wmm,yuchi.xyc}@alibaba-inc.com Engineering
+Beijing,China pipei.hpp@alibaba-inc.com HongKongUniversityofScienceand
+Technology
+AlibabaGroup
+Kowloon,HongKong
+Beijing,China
+GuoliangKang QiweiChen DikLunLee
+Guoliang.Kang@student.uts.edu.au WeiLi dlee@cse.ust.hk
+CentreforArtificialIntelligence {chenqiwei.cqw,rob.lw}@alibaba-inc.comDepartmentofComputerScienceand
+UniversityofTechnologySydney AlibabaGroup Engineering
+Sydney,Australia Hangzhou,China HongKongUniversityofScienceand
+Technology
+Kowloon,HongKong
+ABSTRACT
+Industrialrecommendersystemsusuallyconsistofthematching
+stageandtherankingstage,inordertohandlethebillion-scale
+ofusersanditems.Thematchingstageretrievescandidateitems
+relevanttouserinterests,whiletherankingstagesortscandidate
+itemsbyuserinterests.Thus,themostcriticalabilityistomodeland
+representuserinterestsforeitherstage.Mostoftheexistingdeep
+learning-basedmodelsrepresentoneuserasasinglevectorwhichis
+insufficienttocapturethevaryingnatureofuser’sinterests.Inthis
+Figure1:Left:Theareashighlightedwithdashedrectangle
+paper,weapproachthisproblemfromadifferentview,torepresent
+arepersonalizedforbillion-scaleusersatTmall;Right:User
+oneuserwithmultiplevectorsencodingthedifferentaspectsof
+Ainteractswithproductsfromseveraldifferentcategories,
+theuser’sinterests.WeproposetheMulti-InterestNetworkwith
+including clothes, sports and food, while user B interacts
+Dynamicrouting(MIND)fordealingwithuser’sdiverseinterestsin
+withproductsofbooks,toysandcellphones.
+thematchingstage.Specifically,wedesignamulti-interestextractor
+layer basedon capsule routing mechanism,which is applicable
+forclusteringhistoricalbehaviorsandextractingdiverseinterests.
+Furthermore,wedevelopatechniquenamedlabel-awareattention
+in.Inrecentyears,Tmallhasspenthugeeffortsindevelopingper-
+tohelplearnauserrepresentationwithmultiplevectors.Through
+sonalizedrecommendersystems(RSforshort),whichsignificantly
+extensiveexperimentsonseveralpublicbenchmarksandonelarge-
+contributetotheoptimizationofuserexperienceandtheincrease
+scaleindustrialdatasetfromTmall,wedemonstratethatMINDcan
+ofbusinessvalue.Forexample,thehomepageonMobileTmall
+achievesuperiorperformancethanstate-of-the-artmethodsfor
+App(asshowninFigure1(Left)),whichaccountsforabouthalfof
+recommendation.Currently,MINDhasbeendeployedforhandling
+totaltrafficatTmall,hasdeployedRSfordisplayingpersonalized
+majoronlinetrafficatthehomepageonMobileTmallApp.
+productstomeetcustomers’personalizedneed.
+Duetothebillion-scaleusersanditems,therecommendation
+1 INTRODUCTION
+processdesignedforTmallconsistsoftwostages,thematching
+Tmall,thebiggestBusiness-To-Customer(B2C)e-commerceplat- stageandtherankingstage.Thematchingstageisresponsiblefor
+forminChina,servesbillion-scaleusersbyprovidingbillion-scale retrievingthousandsofcandidateitemsthatarerelevanttouserin-
+productsonline.OnNovember11-thof2018,thewell-knownTmall terests,afterwhichtherankingstagepredictspreciseprobabilities
+globalshoppingfestival,theGrossMerchandiseVolume(GMV) ofusersinteractingwiththesecandidateitems.Forbothofthetwo
+is around 213 billion yuan, achieving an increase rate of 26.9% stages,itisvitaltomodeluserinterestsandfinduserrepresenta-
+comparedwiththesamedayof2017.Asthenumberofusersand tionscapturinguserinterests,inordertosupportefficientretrieval
+productsiscontinuouslygrowing,itbecomesincreasinglyimpor- ofitemsthatsatisfyusers’interests.However,itisnon-trivialto
+tanttohelpeachuserfindproductsthathe/shemightbeinterested modeluserinterestsatTmall,duetotheexistenceofdiversein-
+∗Bothauthorscontributedequallytothisresearch. terestsofusers.Onaverage,billion-scaleusersvisitTmall,each
+†PipeiHuangistheCorrespondingauthor. userinteractswithhundredsofproductseveryday.Theinteracted
+9102
+rpA
+71
+]RI.sc[
+1v03080.4091:viXra
+
+productstendtobelongtodifferentcategories,indicatingthedi- systemsignificantlyimprovestheclick-throughrate(CTR)
+versityofuserinterests.Forexample,asshowninFigure1(Right), ofthehomepageonMobileTmallApp.
+differentusersaredistinctintermsoftheirinterestsandthesame Theremainderofthispaperisorganizedasfollows:relatedworks
+usermayalsobeinterestedinvariouskindsofitems.Therefore, arereviewedinsection2;Section3elaboratesthetechnicaldetails
+thecapabilityofcapturinguser’sdiverseinterestsbecomesvital ofMIND;Insection4,wedetailtheexperimentsforcomparing
+forRSatTmall. MINDwithexistingmethodsonseveralpublicbenchmarksand
+Existingrecommendationalgorithmsmodelandrepresentuser onlineserving;Section5introducesthedeploymentofMINDin
+interestsindifferentways.Collaborativefiltering-basedmethods large-scaleindustrialapplication;Thelastsectiongivesconclusion
+representuserinterestsbyhistoricalinteracteditems[22]orhidden andfutureworkofthispaper.
+factors[17],whichsufferfromsparsityproblemorcomputationally
+demanding.Deeplearning-basedmethodsusuallyrepresentuser 2 RELATEDWORK
+interestswithlow-dimensionalembeddingvectors.Forexample,
+DeepLearningforRecommendation.Inspiredbythesuccessof
+thedeepneuralnetworkproposedforYouTubevideorecommenda-
+deeplearningincomputervisionandnaturallanguageprocessing
+tion(YouTubeDNN)[7]representseachuserbyonefixed-length
+[19],mucheffortshavebeenputfordevelopingdeeplearning-based
+vectortransformedfromthepastbehaviorsofusers,whichcan
+recommendationalgorithms[3].Besidestheindustrialapplications
+beabottleneckformodelingdiverseinterests,asitsdimensional-
+proposed by [7, 31], various types of deep models have gained
+itymustbelargeinordertoexpressthehugenumberofinterest
+significant attention. Neural Collaborative Filtering (NCF) [11],
+profilesatTmall.DeepInterestNetwork(DIN)[31]makestheuser
+DeepFM [9] and Deep Matrix Factorization Models (DMF) [27]
+representationvaryoverdifferentitemswithattentionmechanisms
+constructaneuralnetworkcomposedofseveralMLPstomodelthe
+tocapturethediversityofuserinterests.Nevertheless,theadoption
+interactionbetweenusersanditems.[23]presentsanovelsolution
+ofattentionmechanismsalsomakesitcomputationallyprohibitive
+totop-Nsequentialrecommendationbyprovidinganunitedand
+forlarge-scaleapplicationswithbillion-scaleitemsasitrequires
+flexiblenetworkforcapturingmorefeatures.
+re-calculationofuserrepresentationforeachitem,makingDIN
+UserRepresentation.Representingusersasvectorsiscom-
+onlyapplicablefortherankingstage.
+monlyusedinRS.Traditionalmethodsassemblesuserpreference
+Inthispaper,wefocusontheproblemofmodelingdiverseinter-
+asvectorscomposedofinteresteditems[4,12,22],keywords[5,8]
+estsofusersinthematchingstage.Inordertoovercomethelimita-
+andtopics[29].Astheemergenceofdistributedrepresentation
+tionsofexistingmethods,weproposetheMulti-InterestNetwork
+learning,userembeddingsobtainedbyneuralnetworksarewidely
+withDynamicrouting(MIND)forlearninguserrepresentations
+used.[6]employsRNN-GRUtolearnuserembeddingsfromthe
+thatreflectdiverseinterestsofusersinthematchingstageofindus-
+temporalorderedreviewdocuments.[30]learnsuserembedding
+trialRS.Toinfertheuserrepresentationvectors,wedesignanovel
+vectorsfromwordembeddingvectorsandappliesthemtorecom-
+layercalledmulti-interestextractorlayer,andthislayerutilizes
+mendingscholarlymicroblogs.[2]proposesanovelconvolutional
+dynamicrouting[21]toadaptivelyaggregateuser’shistoricalbe-
+neuralnetworkbasedmodelthatexplicitlylearnsandexploitsuser
+haviorsintouserrepresentations.Theprocessofdynamicrouting
+embeddingsinconjunctionwithfeaturesderivedfromutterances.
+canbeviewedassoft-clustering,whichgroupsuserâĂŹshistorical
+CapsuleNetwork.Theconceptof"Capsule",asmallgroupof
+behaviorsintoseveralclusters.Eachclusterofhistoricalbehaviors
+neuronsassembledtooutputawholevector,isfirstlyproposedby
+isfurtherusedtoinfertheuserrepresentationvectorcorrespond-
+Hinton[13]at2011.Insteadofbackpropagation,dynamicrouting
+ing to one particular interest. In this way, for a particular user,
+[21]isusedtolearntheweightsontheconnectionsbetweencap-
+MINDoutputsmultiplerepresentationvectors,whichcollectively
+sules,whichisimprovedbyutilizingExpectation-Maximization
+representdiverseinterestsofusers.Theuserrepresentationvectors
+algorithm[14]toovercomeseveraldeficienciesandachievesbetter
+arecomputedonlyonceandcanbeusedinthematchingstagefor
+accuracy.Thesetwomaindifferencestoconventionalneuralnet-
+retrievingrelevantitemsfrombillion-scaleitems.Tosummarize,
+workmakecapsulenetworkscapableofencodingtherelationship
+themaincontributionsofthisworkareasfollows:
+betweenthepartandthewhole,whichisadavancedincomputer
+visionandnaturallanguageprocessing.SegCaps[18]provesthat
+capsules can successfully model the spatial relationships of the
+• Tocapturediverseinterestsofusersfromuserbehaviors,
+objectsbetterthantraditionalCNNs.[28]investigatesthecapsule
+wedesignthemulti-interestextractorlayer,whichutilizes
+networksfortextclassificationandproposes3strategiestoboost
+dynamicroutingtoadaptivelyaggregateuser’shistorical
+theperformance.
+behaviorsintouserrepresentationvectors.
+• Byusinguserrepresentationvectorsproducedbythemulti- 3 METHOD
+interestextractorlayerandanewlyproposedlabel-aware
+3.1 ProblemFormalization
+attentionlayer,webuildadeepneuralnetworkforpersonal-
+izedrecommendationtasks.Comparedwithexistingmeth- TheobjectiveofthematchingstageforindustrialRSistoretrieve
+ods,MINDshowssuperiorperformanceonseveralpublic asubsetofitemsfromthebillion-scaleitempoolIforeachuser
+datasetsandoneindustrialdatasetfromTmall. u ∈Usuchthatthesubsetcontainsonlythousandsofitemsand
+• TodeployMINDforservingbillion-scaleusersatTmall,we eachitemisrelevanttointerestsoftheuser.Inordertoachievethis
+constructasystemtoimplementthewholepipelinefordata objective,historicaldatageneratedbyRSiscollectedforbuildinga
+collecting,modeltrainingandonlineserving.Thedeployed matchingmodel.Specifically,eachinstancecanberepresentedby
+2
+
+Figure 2: Overview of MIND. MIND takes user behaviors with user profile features as inputs, and outputs user representa-
+tionvectorsforitemretrievalinthematchingstageofrecommendation.Idfeaturesfrominputlayeraretransformedinto
+embeddingsthroughtheembeddinglayer,andembeddingsofeachitemarefurtheraveragedbyapoolinglayer.Userbehav-
+iorembeddingsarefedintothemulti-interestextractorlayer,whichproducesinterestcapsules.Byconcatenatinginterest
+capsuleswithuserprofileembeddingandtransformingtheconcatenatedcapsulesbyseveralReLUlayers,userrepresenta-
+tionvectorsareobtained.Duringtraining,anextralabel-awareattentionlayerisintroducedtoguidethetrainingprocess.At
+serving,themultipleuserrepresentationvectorsareusedtoretrieveitemsthroughanapproximatenearestneighborlookup
+approach.
+atuple(I u,P u,F i),whereI u denotesthesetofitemsinteracted 3.2 Embedding&PoolingLayer
+byuseru(alsocalleduserbehavior),P u thebasicprofilesofuseru AsshowninFigure2,theinputofMINDconsistsofthreegroups,
+(likeusergenderandage),F i thefeaturesoftargetitem(suchas userprofileP u,userbehaviorI u,andlabelitemF i.Eachgroup
+itemidandcategoryid). containsseveralcategoricalidfeatures,andtheseidfeaturesareof
+ThecoretaskofMINDistolearnafunctionformappingraw extremelyhighdimensionality.Forinstance,thenumberofitem
+featuresintouserrepresentations,whichcanbeformulatedas idsisaboutbillions,thusweadoptthewidely-usedembedding
+Vu =f user(I u,P u), (1) techniquetoembedtheseidfeaturesintolow-dimensionaldense
+vectors(a.k.aembeddings),whichsignificantlyreducesthenumber
+whereVu = (cid:16)→−v u1,...,→−v uK(cid:17) ∈Rd×K denotestherepresentationvec- ofparametersandeasesthelearningprocess.Foridfeatures(gender,
+torsofuseru,dthedimensionality,Kthenumberofrepresentation
+age,etc.)fromP u,corresponding →−embeddingsareconcatenatedto
+vectors.WhenK =1,onerepresentationvectorisused,justlike formtheuserprofileembedding pu.Foritemidsalongwithother
+categoricalids(brandid,shopid,etc.)thathavebeenprovedtobe
+YouTubeDNN.Besides,therepresentationvectoroftargetitemiis
+obtainedbyanembeddingfunctionas
+usefulforcold-startitems[25]fromF i,correspondingembeddings
+arefurtherpassedthroughanaveragepoolinglayertoformthe
+→− ei =f item(F i), (2) label item embedding→− ei. Lastly, for items from user behavior
+w thh ee dr ee t→− ae ili o∈ ffRd×1d we in llo bte es ilt lh ue str re ap tere ds ie nnt ta ht eio "n Emve bc et do dr io nf gi &tem Poi o, la in nd
+g
+I bu eh, aco vr iore rs ep mon bd edin dg ini gte Em ue =m {b →−e ed jd ,in jg ∈s Ia ure }.collectedtoformtheuser
+item
+Layer"section.
+3.3 Multi-InterestExtractorLayer
+Whenuserrepresentationvectorsanditemrepresentationvector
+arelearned,topN candidateitemsareretrievedaccordingtothe Wearguethatrepresentinguserinterestsbyonerepresentation
+scoringfunction vectorcanbeabottleneckforcapturingdiverseinterestsofusers,
+becausewehavetocompressallinformationrelatedwithdiverse
+f
+score
+(cid:16) Vu,→− ei(cid:17) = max →− e iT→−v uk, (3) interestsofusersintoonerepresentationvector.Thus,allinfor-
+1≤k≤K
+mationaboutdiverseinterestsofusersismixedtogether,causing
+whereN isthepredefinednumberofitemstoberetrievedinthe inaccurateitemretrievalforthematchingstage.Instead,weadopt
+matchingstage. multiplerepresentationvectorstoexpressdistinctinterestsofusers
+3
+
+separately.Bythisway,diverseinterestsofusersareconsideredsep- thecapsuleisusedtorepresenttheprobabilitythattheproperty
+aratelyinthematchingstage,enablingmoreaccurateitemretrieval exists.Correspondingly,theobjectiveofthemulti-interestextractor
+foreveryaspectofinterests. layeristolearnrepresentationsforexpressingpropertiesofuser
+Tolearnmultiplerepresentationvectors,weutilizeclustering interests as well as whether corresponding interests exist. The
+processtogroupuser’shistoricalbehaviorsintoseveralclusters. semanticconnectionbetweencapsulesandinterestrepresentations
+Itemsfromoneclusterareexpectedtobecloselyrelatedandcol- motivates us to regard the behavior/interest representations as
+lectivelyrepresentoneparticularaspectofuserinterests.Here,we behavior/interestcapsulesandemploydynamicroutingtolearn
+designthemulti-interestextractorlayerforclusteringhistorical interestcapsulesfrombehaviorcapsules.Nevertheless,theoriginal
+behaviorsandinferringrepresentationvectorsforresultedclusters. routingalgorithmproposedforimagedataisnotdirectlyapplicable
+Sincethedesignofmulti-interestextractorlayerisinspiredbythe for processing user behavior data. So, we propose Behavior-to-
+recentlyproposeddynamicroutingforrepresentationlearningin Interest(B2I)dynamicroutingforadaptivelyaggregatinguser’s
+capsulenetwork[13,14,21],wefirstlyrevisitessentialbasicsin behaviorsintointerestrepresentationvectors,anditdiffersfrom
+ordertomakethispaperself-contained. originalroutingalgorithminthreeaspects.
+Sharedbilinearmappingmatrix.Weusefixedbilinearmapping
+3.3.1 DynamicRoutingRevisit. Webrieflyintroducedynamicrout-
+matrixSinsteadofaseparatebilinearmappingmatrixforeachpair
+ing [21] for representation learning of capsules, a new form of
+oflow-levelcapsulesandhigh-levelcapsulesinoriginaldynamic
+neuralunitsrepresentedbyvectors.Supposewehavetwolayersof
+routingduetotwoconsiderations.Ontheonehand,userbehaviors
+capsules,andwerefercapsulesfromthefirstlayerandthesecond
+areofvariable-length,rangingfromdozenstohundredsforTmall
+layeraslow-levelcapsulesandhigh-levelcapsulesrespectively.
+users,thustheuseoffixedbilinearmappingmatrixisgeneralizable.
+The goal of dynamic routing is to compute the values of high-
+Ontheotherhand,wehopeinterestcapsuleslieinthesamevector
+levelcapsulesgiventhevaluesoflow-levelcapsulesinaniterative
+space,butdifferentbilinearmappingmatricewouldmapinterest
+way.Ineachiteration,givenlow-levelcapsulesi ∈{1,...,m}with
+correspondingvectors→− cl ∈ RNl×1,i ∈ {1,...,m}andhigh-level capsules into different vector spaces. Thus, the routing logit is
+i calculatedby
+c {a 1p ,.s .u .,le ns },j t∈ he{ r1 o, u.. t. i, nn g} lw ogit ih tbc io jr bre es twpo en ed ni ln og wv -e lec vto er ls c→ a− c ph j su∈ leR iaN nh d×1 h, igj h∈
+-
+bij =→− uT
+j
+S→− ei, i ∈I u,j ∈{1,...,K}, (8)
+levelcapsulejiscomputedby where→− ei ∈Rddenotestheembeddingofbehavioritemi,→− uj ∈Rd
+bij =(→− ch j)TSij→− cl i, (4) t Rh de ×v de ic sto shr ao rf ei dnt ae cr re os st sc ea ap cs hu ple aij r.T ofh be eb hi ali vn ie oa rr cm apa sp up lein sg anm da it nri tx erS es∈
+t
+whereSij ∈ RNh×Nl denotesthebilinearmappingmatrixtobe capsules.
+learned. Randomlyinitializedroutinglogits.Owingtotheuseofshared
+Withroutinglogitscalculated,thecandidatevectorforhigh-level bilinearmappingmatrixS,initializingroutinglogitstozeroswill
+capsulejiscomputedasweightedsumofalllow-levelcapsules lead to the same initial interest capsules. Then, the subsequent
+m iterationswillbetrappedinasituation,wheredifferentinterest
+→− zh
+j
+=(cid:213) wijSij→− cl i, (5) capsulesremainthesameallthetime.Tomitigatethisphenomenon,
+i=1 wesamplearandommatrixfromgaussiandistributionN(0,σ2)for
+wherewij denotestheweightforconnectinglow-levelcapsulei initialroutinglogitstomakeinitialinterestcapsulesdifferfromeach
+andhigh-levelcapsulejandiscalculatedbyperformingsoftmax other,similartothewell-establishedK-Meansclusteringalgorithm.
+onroutinglogitsas Dynamicinterestnumber.Asthenumberofinterestcapsules
+ownedbydifferentusersmaybedifferent,weintroduceaheuristic
+wij = (cid:205)mexp eb xi pj
+b
+. (6) rule for adaptively adjusting the value of K for different users.
+k=1 ik Specifically,thevalueofK foruseruiscomputedby
+vecF ti on ra sll oy f, ha ign ho -n le-l vin ele ca ar p" ss uq lu ea ss ah s"functionisappliedtoobtainthe K u′ =max(1,min(K,log 2(|I u|))). (9)
+Thisstrategyforadjustingthenumberofinterestcapsulescan
+→− ch j =squash(→− zh j)= 1+(cid:13) (cid:13) (cid:13)→− z (cid:13)
+(cid:13)
+(cid:13)→−h j z(cid:13) (cid:13) (cid:13)
+h
+j2 (cid:13)
+(cid:13)
+(cid:13)2(cid:13)
+(cid:13)
+(cid:13)→→ −− zz hh jj (cid:13)
+(cid:13)
+(cid:13). (7) s soav u Te r hcs e eo s wm ,f he o orr le t ehs do o yu se nrc aue mss e i, r ci sn rw ocl uiu t td h inin f geg w pb re oo r ct i eh n dtc ueo r rm e es ip t ssu . lt isin teg da in nd Am lge om rio thry mr 1e .-
+Thevaluesofbij areinitializedtozeros,andtheroutingprocess
+3.4 Label-awareAttentionLayer
+isusuallyrepeatedthreetimestoconverge.Whenroutingfinished,
+high-levelcapsule’svalues→− ch arefixedandcanbeusedasinputs Throughmulti-interestextractorlayer,severalinterestcapsulesare
+j generatedfromuser’sbehaviorembeddings.Differentinterestcap-
+fornextlayers.
+sulesrepresentdifferentaspectsofuserinterests,andtherelevant
+3.3.2 B2IDynamicRouting. Inanutshell,capsuleisanewkind interestcapsuleisusedforevaluatinguser’spreferenceonspecific
+ofneuronrepresentedbyonevectorinsteadofonescalarusedin items.Therefore,duringtraining,wedesignalabel-awareattention
+ordinaryneuralnetworks.Thevector-basedcapsuleisexpectedto layerbasedonscaleddot-productattention[24]tomakethetarget
+beabletorepresentdifferentpropertiesofanentity,inwhichthe itemchoosewhichinterestcapsuleisused.Specifically,forone
+orientationofacapsulerepresentsonepropertyandthelengthof targetitem,wecalculatethecompatibilitiesbetweeneachinterest
+4
+
+Algorithm1B2IDynamicRouting. Table1:Statisticsofthetwodatasetsforofflineevaluation.
+(cid:110)→− (cid:111)
+Input:behaviorembeddings ei,i ∈I u ,iterationtimesr,
+Dataset Users Goods Categories Samples
+numberofinterestcapsulesK
+Output:interestcapsules(cid:110)→−
+uj,j =1,...,K
+u′(cid:111) Am Ta mz ao ln lDB ao to aks 23 ,05 11 4,3 ,85 66
+5
+3 99 33 4, ,8 70 51
+1
+6,31
+77
+56 0,2 ,97 21 9,5 ,81 01
+2
+1: calculateadaptivenumberofinterestcapsulesK u′ by(9)
+2: forallbehaviorcapsuleiandinterestcapsulej:initializebij ∼
+N(0,σ2). Thus,weusethesampledsoftmaxtechnique[7]tomaketheob-
+jectivefunctiontrackableandchoosetheAdamoptimizer[16]for
+3: fork ←1,r do
+trainingMIND.
+4: forallbehaviorcapsulei:wij ←softmax(bij)
+5: forallinterestcapsulej:→ →− −zj =(cid:205) i∈I uw →i −jS→− ei atteA nf tt ie or nt lr aa yi en rin cg an,t bh ee uM seI dN aD sun se et rw reo prk rese ex nc te ap tt iof nor mt ah pe pil nab ge fl u- naw cta ior ne
+6: forallinterestcapsulej: uj ←squash(zj) f .Atservingtime,user’sbehaviorsequenceanduserprofile
+user
+7: for all behavior capsulei and interest capsule j:bij ← arefedintothef function,producingmultiplerepresentation
+bij
++→−
+uT j
+S→−
+ei
+vectorsforeachuu ss ee rr
+.Then,theserepresentationvectorsareusedto
+8: endfor retrievetopN itemsbyanapproximatenearestneighborapproach
+9:
+return(cid:110)→−
+uj,j =1,...,K
+u′(cid:111)
+[15].Theseitemswithhighestsimilaritieswithuser’srepresenta-
+tionvectorsareretrievedandconstitutethefinalsetofcandidate
+itemsforthematchingstageofRS.Pleasenotethat,whenauser
+hasnewactions,itwillalterhis/herbehaviorsequenceaswellas
+capsuleandtargetitemembedding,andcomputeaweightedsum
+thecorrespondinguserrepresentationvectors,thusMINDenables
+of interest capsules as user representation vector for the target
+real-timepersonalizationforthematchingstage.
+item,wheretheweightforoneinterestcapsuleisdeterminedby
+correspondingcompatibility.Inlabel-awareattention,thelabelis 3.6 ConnectionswithExistingMethods
+thequeryandtheinterestcapsulesarebothkeysandvalues,as
+Here,wemakesomeremarksabouttherelationsbetweenMIND
+showninFigure2.Theoutputvectorofuseruwithrespecttoitem
+andtwoexistingmethods,illustratingtheirsimilaritiesaswellas
+iiscomputedas
+differences.
+→−v
+u
+=Attention(cid:16)→− ei,Vu,Vu(cid:17) YouTubeDNN.BothMINDandYouTubeDNNutilizedeepneural
+networkstomodelbehaviordatatogenerateuserrepresentations,
+=Vusoftmax(pow(V uT→− ei,p)), whichareusedforlarge-scaleitemretrievalinthematchingstageof
+industrialRS.However,YouTubeDNNusesonevectortorepresent
+wherepowdenoteselement-wiseexponentiationoperator,patun-
+auserwhileMINDusesmultiplevectorsforthat.Whenthevalue
+ableparameterforadjustingtheattentiondistribution.Whenp
+ofK inAlgorithm1equalsto1,MINDdegeneratestoYouTube
+iscloseto0,eachinterestcapsuleattendstoreceiveevenatten-
+DNN,thusMINDcanbeviewedasgeneralizationofYouTubeDNN.
+tion.Whenpisbiggerthan1,aspincreases,thevaluehasbigger
+DIN.Intermsofcapturingdiverseinterestsofusers,MINDand
+dot-productwillreceivemoreandmoreweight.Considerthelimit
+DINsharethesimilargoal.However,thetwomethodsdifferin
+case,whenpgetsinfinity,theattentionmechanismbecomesakind
+thewayofachievingthegoalaswellasapplicability.Todealwith
+ofhardattentiontopickthevaluewhohasthebiggestattention
+diverseinterests,DINappliesanattentionmechanismattheitem
+andignoreothers.Inourexperiments,wefindoutthatusinghard
+level,whileMINDemploysdynamicroutingtogenerateinterest
+attentionleadstofasterconvergence.
+capsulesandconsidersdiversityattheinterestlevel.Moreover,
+DINfocusesontherankingstageasithandlesthousandsofitems,
+3.5 Training&Serving
+however,MINDdecouplestheprocessofinferringuserrepresenta-
+Withtheuservector→−v
+u
+andthelabelitemembedding→−
+ei ready, tionsandmeasuringuser-itemcompatibility,makingitapplicable
+wecomputetheprobabilityoftheuseruinteractingwiththelabel tobillion-scaleitemsinthematchingstage.
+itemias
+4 EXPERIMENTS
+Pr(i|u)=Pr(cid:16)→− ei|→−v u(cid:17) =
+(cid:205)
+j∈ex Ip
+ex(cid:16)→−v
+pu (cid:16)T
+→−→ v−
+e uTi
+→−(cid:17)
+ej(cid:17). (10) 4 In.1 thisO seff ctl ioin n,e wE ev pa rel su ea nt ti to hen
+comparisonsbetweenMINDand
+existingmethodsintermsofrecommendationaccuracyonseveral
+Then,theoverallobjectivefunctionfortrainingMINDis datasetsunderofflinesettings.
+(cid:213)
+L= logPr(i|u), (11) 4.1.1 DatasetsandExperimentalSetup. Wechoosetwodatasetsfor
+(u,i)∈D evaluatingrecommendationperformance.OneisAmazonBooks1
+providedby[10,20],representingoneofthemostwidely-used
+where D isthecollectionoftrainingdatacontaininguser-item
+publicdatasetfore-commercerecommendations.Theothercalled
+interactions.Sincethenumberofitemsscalestobillions,thesum
+operationofthedenominator(10)iscomputationallyprohibitive. 1http://jmcauley.ucsd.edu/data/amazon/
+5
+
+TmallDataisheldoutfromMobileTmallApp,containinghistorical forTmallData,astheusersofTmalltendtoexhibitmorediverse
+behaviorsofrandomlysampledtwomillionsofTmallusersin10 interests.Thisincreasementofdiversitycanalsobereflectedby
+days.ForAmazonBooks,weonlykeepitemswhichhavebeen the bestK for each dataset, where the bestK for TmallData is
+reviewedatleast10timesanduserswhohavereviewedatleast largerthanthatforAmazonBooks.TheimprovementofMIND-
+10items.ForTmallData,wefilteroutitemsclickedbylessthan 1-interestoverYouTubeDNNshowsthatdynamicroutingserves
+600uniqueusers.Thestatisticsofthetwodatasetsareshownin asabetterpoolingstrategythanaveragepooling.Consideringthe
+Table1. resultsofMaxMFandMIND-K-interest,itverifiesthatextracting
+Wechoosenextitempredictionproblem,thatispredictinga multipleinterestsfromuserbehaviorsbydynamicroutingoutper-
+user’snextinteraction,toevaluatethemethods’performance,be- formsthenonlinearmodelingstrategyusedinMaxMF.Thiscanbe
+causeitisthecoretaskinthematchingstageofRS.Afterdividing attributedtotwopoints:1)Themulti-interestextractorlayeruti-
+theuser-iteminteractiondataofeachdatasetrandomlyintotrain- lizesaclusteringprocedureforgeneratinginterestrepresentations,
+ingsetandtestsetbyaratioof19:1,foreachuser,arandomly whichachievesmorepreciserepresentationofuser.2)Label-aware
+selectediteminteractedbytheuserisusedastargetitem,while attentionlayermakestargetitemattendovermultipleuserrepre-
+theitemsinteractedbeforethetargetitemarecollectedastheuser sentationvectors,enablingmoreaccuratematchingbetweenuser
+behaviors.Hitrateisadoptedasthemainmetrictomeasurethe interestsandtargetitem.
+recommendationperformance,defineas:
+HitRate@N =
+(cid:205)
+(u,i)∈D test
+I(targetitemoccursintopN)
+,
+|D |
+test
+(12)
+whereD test denotesthetestsetconsistingofpairsofusersand
+targetitems(u,i)andI denotestheindicatorfunction.
+Hyperparametertuningforthedimensionalityofembedding
+vectorsd andthenumberofuserinterestsK isconductedbyex-
+perimentsonagroupofparameterspredefinedaccordingtothe
+scaleanddistributionofeachdataset,andeachmethodistested
+withbesthyperparametersforafaircomparison.
+4.1.2 ComparingMethods.
+• WALS[1]WALS,shortforWeightedAlternatingLeastSquares,
+isaclassicalmatrixfactorizationalgorithmfordecomposing
+user-iteminteractionmatrixintohiddenfactorsofusersand
+items.Recommendationismadebasedoncompatibilities
+betweenhiddenfactorsofusersandtargetitems.
+• YouTubeDNN[7]Asmentionedabove,YouTubeDNNis
+oneofthemostsuccessfuldeeplearningmethodusedfor
+industrialrecommendationsystems.
+• MaxMF[26]Themethodintroducesahighlyscalablemethod
+forlearningnonlinearlatentfactorizationtomodelmultiple Figure 3: Hyperparameters’ impact. The upper part shows
+userinterests. thatMINDcanachievecomparableresultswithdifferentσ;
+thelowerpartshowsthatMINDperformsbetterwithbigger
+4.1.3 ExperimentalResults. Table2summarizestheperformance
+p.
+ofMINDaswellasbaselinesontwodatasetsintermsofHitRate@N
+(N=10,50,100).Clearly,MINDaccomplishescomparableperfor-
+mancetoallofthebaselinesonbothdatasets.Thematrixfactor-
+4.2 AnalysisofHyperparameters
+izationapproach,WALS,isbeatenbyothermethods,revealingthe
+powerofdeeplearningforimprovingthematchingstageofRS. Inthissection,weconducttwoexperimentsonAmazonBooksto
+However,equippedwithoutdeeplearning,MaxMFperformsmuch studytheinfluenceofthehyperparameterswithinmulti-interest
+betterthanWALS,whichcanbeexplainedbythefactthatMaxMF extractorlayerandlabel-awareattentionlayer.
+generalizesstandardMFtoanonlinearmodelandadoptsmultiple Initializationofroutinglogits.Therandominitializationfor
+userrepresentationvectors.Itcanbeobservedthatmethodsem- routinglogitsadoptedinmulti-interestextractorlayerissimilar
+ployingmultipleuserrepresentationvectors(MaxMF-K-interest, totheinitializationofK-meanscentroids,wherethedistributions
+MIND-K-interest)performsgenerallybetterthanothermethods ofinitialclustercentershavestrongimpactonthefinalclustering
+(WALS,YouTubeDNN,MIND-1-interest).Therefore,usingmultiple results.Astheroutinglogitsareinitializedaccordingtogaussian
+userrepresentationvectorsisprovedtobeaneffectivewayformod- distributionN(0,σ2),weconcernaboutdifferentvaluesofσ may
+elinguser’sdiverseinterestsaswellasboostingrecommendation leadtodifferentconvergencewhichhaseffectontheperformance.
+accuracy.Moreover,wecanobservethattheimprovementintro- Tostudytheimpactofσ,weinitializetheroutinglogitsbij with
+ducedbymultipleuserrepresentationvectorsismoresignificant 3differentvaluesofσ,0.1,1and5.Theresultsareshownbythe
+6
+
+Table2:HitRateofdifferentmethodsonthetwodatasets,wherebestperformanceisinboldface.HPdenoteshyperparameters,
+includingK thenumberofinterestsanddthedimensionalityofembeddings.Onlytheresultswithhyperparametershaving
+bestperformanceisshowntodemonstratetheeffectivenessofcorrespondingmethods.Percentagesinthebracketsindicate
+therelativeimprovementsoverYouTubeDNN.
+Dataset HP Metric WALS YouTubeDNN MaxMF-K-interest MIND-1-interest MIND-K-interest
+HR@10 0.0144(-37.66%) 0.0231 0.0285(+23.38%) 0.0273(+18.18%) 0.0309(+33.77%)
+K =3
+AmazonBooks HR@50 0.0553(-25.87%) 0.0746 0.0862(+15.55%) 0.0978(+31.10%) 0.1101(+47.59%)
+d=36
+HR@100 0.0907(-20.65%) 0.1143 0.1304(+14.09%) 0.1459(+27.65%) 0.1631(+42.69%)
+HR@10 0.0372(-36.84%) 0.0589 0.0628(+6.62%) 0.0720(+22.24%) 0.0972(+65.03%)
+K =5
+TmallData HR@50 0.0831(-33.84%) 0.1256 0.1820(+44.90%) 0.1512(+20.38%) 0.2080(+65.60%)
+d=64
+HR@100 0.1126(-31.67%) 0.1648 0.2567(+55.76%) 0.1930(+17.11%) 0.2699(+63.77%)
+upperpartofFigure3,whereeachcurveof3valuesalmostoverlap.
+ThisobservationrevealsthatMINDisrobusttothevaluesofσ,
+anditisrationaltochooseσ =1forourpracticalapplications.
+Powernumberinlabel-awareattention.Asmentionedbe-
+fore,thepowernumberpwithinlabel-awareattentioncontrolsthe
+proportionofeachinteresttothecombinedlabel-awareinterest
+representation.WecomparetheperformanceofMINDaspvaries
+from0to∞andshowtheresultsbythelowerpartofFigure3.
+Clearly,theperformanceofp =0ismuchworsethantheothers.
+Thereasonisthat,whentakingp =0eachinteresthasthesame
+attentionthusthecombinedinterestrepresentationequalstheav-
+erageofinterestswithnoreferencetothelabel. Takingp ⩾ 1,
+theattentionscoresareproportionaltothesimilaritiesbetween
+interestrepresentationvectorsandtargetitemembeddings,which
+Figure4:OnlineCTRsinaweek.MINDwith5~7interests
+makesthecombinedinterestrepresentationaweightedsumof
+performsbestinallcomparingmethods.MINDsignificantly
+interests.Italsoshowsthatperformancegetsbetteraspincreases,
+beatsthetwobaselinemethods,item-basedCFandYouTube
+sincetherepresentationvectoroftheinterestwithmoresimilarity
+DNN.
+tothetargetitemacquireslargerattention,whichevolvestoahard
+attentionschemeasp=∞.Bythisscheme,theinterestrepresen-
+tationnearesttothetargetitemdominatesthecombinedinterest
+representation,enablingMINDconvergefasterandperformthe
+DNNwhichisalsoexceededbyMINDwithsingleinterest.2)A
+best.
+verynoticeabletrendisthattheperformanceofMINDgetsbet-
+4.3 OnlineExperiments terasthenumberofextractedinterestsincreasesfrom1to5.3)
+TheperformanceofMINDpeakswhenthenumberofextracted
+WeconductonlineexperimentsbydeployingMINDtohandlereal
+interestsreaches5,afterthattheCTRremainsconstantandthe
+traffic at Tmall homepage for one week. To make comparisons
+improvementof7interestsisignorable.4)MINDwithdynamic
+fairly,allmethodsdeployedinthematchingstagearefollowedby
+interestnumberhasthecomparableperformancewithMINDwith
+thesamerankingprocedure.CTR,shortforclick-through-rate,a
+7interests.Fromtheobservationsabove,wemakeseveralconclu-
+widelyusedindustrialmetric,isusedtomeasuretheperformance
+sions.First,forTmall,theoptimalnumberofuserinterestsis5~7,
+ofmethodsforservingonlinetraffic.
+whichrevealstheaveragediversityofuserinterests.Second,the
+Therearetwobaselinemethodsforonlineexperiments.Oneis
+dynamicinterestnumbermechanismdoesnotbringCTRgain,but
+item-basedCF,whichisthebasematchingalgorithmservingthe
+duringtheexperimentswerecognizetheschemecandecreasethe
+majorityoftheonlinetraffic.TheotherisYouTubeDNN,whichis
+costofserving,whichbenefitslarge-scaleservicesuchasTmall
+thewell-knowndeeplearning-basedmatchingmodel.Wedeploy
+andismoreadoptableinpractice.Inaword,theonlineexperiments
+allcomparingmethodsinanA/Btestframework,andonethousand
+validatethatMINDachievesanbettersolutiontomodeluserswith
+ofcandidateitemsareretrievedbyeachmethod,whichthenfedto
+diverseinterestsandcansignificantlyadvancethewholeRS.
+therankingstageforfinalrecommendation.
+TheexperimentalresultsaresummarizedinFigure4.Itisclearly
+4.4 CaseStudy
+thatMINDoutperformsitem-basedCFandYouTubeDNN,which
+indicatesthatMINDgeneratesabetteruserrepresentation.Besides, 4.4.1 Coupling Coefficients. The coupling coefficients between
+we make the following observations: 1) As is optimized by the behaviorcapsulesandinterestcapsulesquantifythegradeofmem-
+long-termpractice,item-basedCFperformsbetterthanYouTube bershipofbehaviorstointerests.Inthissection,wevisualizethese
+7
+
+Figure 5: Heatmap of coupling coefficients for two users. Figure6:Thedistributionofitemsrecalledbyeachinterest
+Eachclassofbehaviorshasthemaxcouplingcoefficientson corresponding to the user behaviors exampled on the left.
+the corresponding interest. User C (upper) and user D (be- Eachinterestisdemonstratedbyoneaxis,ofwhichtheco-
+low)havedifferentgranularityofinterests. ordinateisthesimilaritybetweenitemsandinterests.The
+sizeofthepointisproportionaltothenumberoftheitems
+withthespecificsimilarity.
+couplingcoefficientstoshowthattheinterestextractionprocessis
+interpretable.
+Figure5illustratesthecouplingcoefficientsassociatedtotwo 5 SYSTEMDEPLOYMENT
+usersrandomlyselectedfromTmalldailyactiveusers,whereeach Inthissection,wedescribetheimplementationanddeployment
+rowcorrespondstooneinterestcapsuleandeachcolumncorre- ofMINDatTmall.Atypicalworkflowcomposedofseveralbasic
+spondstoonebehavior.ItshowsthatuserC(upper)hasinteracted platformsisshownasFigure7anddetailedasbelow:
+with4classesofgoods(headphones,snacks,handbagsandclothes),
+eachofwhichhasthemaxcouplingcoefficientsononeinterest
+capsuleandformsthecorrespondinginterest.WhileuserD(be-
+low)isinterestedonlyinclothes,thusthe3interestswithfiner
+grainsize(sweaters,overcoatsanddownjackets)areresolvedfrom
+thebehaviors.Regardingthisresult,weconfirmthateachclassof
+userbehaviorsareclusteredtogetherandformthecorresponding
+interestrepresentationvector.
+4.4.2 ItemDistribution. Atservingtime,itemssimilartouserin-
+terestsareretrievedbynearestneighborsearch.Wevisualizethe
+distributionoftheseitemsrecalledbyeachinterestbasedontheir
+similaritytothecorrespondinginterest.Figure6showstheitem
+Figure7:ArchitectureoftheRSatTmall.
+distributionsofthesameuser(userC)mentionedbyFigure5(up-
+per).Thedistributionsareobtainedbytwomethodsrespectively,
+wheretheupper4axesdemonstratetheitemsrecalledby4inter- AsuserslaunchMobileTmallAPP,therequestsforrecommen-
+estsbasedonMINDwhilethelowestaxisillustratesthatbased dationaresenttoTmallPersonalityPlatform,theservercluster
+onYouTubeDNN.Theitemsarescatteredattheaxesaccording integratedwithabunchofplug-inmodulesandservedasonlinerec-
+totheirsimilaritywiththeinterests,whichhasbeenscaledto0 ommenderserviceofTmall.Recentbehaviorsofusersareretrieved
+~1bymin-maxnormalizationandroundedtothenearest0.5.One byTmallPersonalityPlatformandsenttoUserInterestExtractor
+pointisassembledbytheitemslyingwithinthespecificrange, whichisthemainmoduleimplementingMINDfortransforming
+thusthesizeofeachpointrepresentsthenumberoftheitemswith userbehaviorstomultipleuserinterests.Subsequently,RecallEn-
+thecorrespondingsimilarity.Wealsoshowsomeitemsselected ginesearchesfortheitemswithembeddingvectorsnearesttothe
+randomlyfromallthecandidates.Asexpected,theitemsrecalled userinterests.Itemstriggeredbydifferentinterestsaremergedto-
+byMINDarestronglycorrelatedwiththecorrespondinginterest, getherascandidateitemsandsortedbytheirsimilaritytotheuser
+whilethatbyYouTubeDNNvarywidelyalongthecategoriesof interests.Thewholeprocedureofselectingthousandsofcandidate
+itemsandhavelowersimilaritytotheuser’sbehaviors. itemsfromthebillion-scaleitempoolbyUserInterestExtractor
+8
+
+andRecallEnginecanbefulfilledinlessthan15milliseconds,due [8] AliMamdouhElkahky,YangSong,andXiaodongHe.2015.Amulti-viewdeep
+totheeffectivenessofservingbasedonMIND.Takingatradeoff learningapproachforcrossdomainusermodelinginrecommendationsystems.In
+Proceedingsofthe24thInternationalConferenceonWorldWideWeb.International
+betweenthescopeofitemsandtheresponsetimeofthesystem,top
+WorldWideWebConferencesSteeringCommittee,278–288.
+1000ofthesecandidateitemsarescoredbyRankingServicewhich [9] HuifengGuo,RuimingTang,YunmingYe,ZhenguoLi,andXiuqiangHe.2017.
+predictsCTRswithabunchoffeatures.Finally,TmallPersonality DeepFM:AFactorization-machineBasedNeuralNetworkforCTRPrediction.
+InProceedingsofthe26thInternationalJointConferenceonArtificialIntelligence
+Platformcompletestheitemlistastherecommendationresults (IJCAI’17).AAAIPress,1725–1731.
+showntousers.BothUserInterestExtractorandRankingServiceare [10] RuiningHeandJulianMcAuley.2016. Upsanddowns:Modelingthevisual
+evolutionoffashiontrendswithone-classcollaborativefiltering.Inproceedings
+trainedonModelTrainingPlatformusing100GPUs,bywhichthe
+ofthe25thinternationalconferenceonworldwideweb.InternationalWorldWide
+trainingcanbeexecutedin8hours.Benefitingfromthesuperior WebConferencesSteeringCommittee,507–517.
+performanceofModelTrainingPlatform,thedeepnetworkserved [11] XiangnanHe,LiziLiao,HanwangZhang,LiqiangNie,XiaHu,andTat-Seng
+Chua.2017.Neuralcollaborativefiltering.InProceedingsofthe26thInternational
+forpredictionisupdatedeveryday,whichguaranteesthenewly
+ConferenceonWorldWideWeb.InternationalWorldWideWebConferences
+releasedproductstobecalculatedandexposured. SteeringCommittee,173–182.
+[12] JonHerlocker,JosephAKonstan,andJohnRiedl.2002. Anempiricalanaly-
+sisofdesignchoicesinneighborhood-basedcollaborativefilteringalgorithms.
+6 CONCLUSIONANDFUTUREWORK Informationretrieval5,4(2002),287–310.
+[13] GeoffreyEHinton,AlexKrizhevsky,andSidaDWang.2011. Transforming
+Inthispaper,weproposeanewstructureofneuralnetwork,namely auto-encoders.InInternationalConferenceonArtificialNeuralNetworks.Springer,
+Multi-InterestNetworkwithDynamicrouting(MIND),torepresent 44–51.
+[14] GeoffreyEHinton,SaraSabour,andNicholasFrosst.2018.Matrixcapsuleswith
+user’sdiverseinterestsforthematchingstageine-commercerecom-
+EMrouting.InInternationalConferenceonLearningRepresentations.
+mendation,whichinvolvesbillionscaleusersanditems.Specifically, [15] JeffJohnson,MatthijsDouze,andHervéJégou.2017. Billion-scalesimilarity
+wedesignamulti-interestextractorlayerwithavariantdynamic searchwithgpus.arXivpreprintarXiv:1702.08734(2017).
+[16] DiederikPKingmaandJimmyBa.2014.Adam:Amethodforstochasticopti-
+routingtoextractuser’sdiverseinterestsandtheseinterestsare mization.arXivpreprintarXiv:1412.6980(2014).
+thentrainedwithanovellabel-awareattentionscheme.Offline [17] YehudaKoren,RobertBell,andChrisVolinsky.2009.Matrixfactorizationtech-
+niquesforrecommendersystems.Computer8(2009),30–37.
+experimentsareconductedtodemonstratethatMINDachieves
+[18] RodneyLaLondeandUlasBagci.2018.CapsulesforObjectSegmentation.arXiv
+superiorperformanceonpublicbenchmarks.OnlineCTRsarealso preprintarXiv:1804.04241(2018).
+reportedtodemonstratetheeffectivenessandfeasibilityofMIND [19] YannLeCun,YoshuaBengio,andGeoffreyHinton.2015.Deeplearning.nature
+521,7553(2015),436.
+atTmall’sliveproduction.Forfuturework,wewillpursuetwo
+[20] JulianMcAuley,ChristopherTargett,QinfengShi,andAntonVanDenHengel.
+directions.Thefirstistoincorporatemoreinformationaboutuser’s 2015.Image-basedrecommendationsonstylesandsubstitutes.InProceedings
+behaviorsequence,suchasbehaviortimeetc.Theseconddirection ofthe38thInternationalACMSIGIRConferenceonResearchandDevelopmentin
+InformationRetrieval.ACM,43–52.
+istooptimizetheinitializationschemeofdynamicrouting,refer- [21] SaraSabour,NicholasFrosst,andGeoffreyEHinton.2017. Dynamicrouting
+ringtoK-means++initializationscheme,soastoachieveabetter betweencapsules.InAdvancesinNeuralInformationProcessingSystems.3856–
+3866.
+userrepresentation.
+[22] BadrulSarwar,GeorgeKarypis,JosephKonstan,andJohnRiedl.2001.Item-based
+collaborativefilteringrecommendationalgorithms.InProceedingsofthe10th
+internationalconferenceonWorldWideWeb.ACM,285–295.
+ACKNOWLEDGMENTS
+[23] JiaxiTangandKeWang.2018. Personalizedtop-nsequentialrecommenda-
+tionviaconvolutionalsequenceembedding.InProceedingsoftheEleventhACM
+Wewouldliketothankcolleaguesofourteam-JizheWang,An-
+InternationalConferenceonWebSearchandDataMining.ACM,565–573.
+dreasPfadler,JiamingXu,WenChen,LifengWang,XinGuoand [24] AshishVaswani,NoamShazeer,NikiParmar,JakobUszkoreit,LlionJones,
+ChengGuoforusefuldiscussionsandsupportsonthiswork.We AidanNGomez,ŁukaszKaiser,andIlliaPolosukhin.2017. Attentionisall
+youneed.InAdvancesinNeuralInformationProcessingSystems.5998–6008.
+aregratefultoourcooperativeteam-searchengineeringteam.We
+[25] JizheWang,PipeiHuang,HuanZhao,ZhiboZhang,BinqiangZhao,andDikLun
+alsothanktheanonymousreviewersfortheirvaluablecomments Lee.2018.Billion-scaleCommodityEmbeddingforE-commerceRecommendation
+andsuggestionsthathelpimprovethequalityofthismanuscript. inAlibaba.InProceedingsofthe24thACMSIGKDDInternationalConferenceon
+KnowledgeDiscovery&#38;DataMining(KDD’18).839–848.
+[26] JasonWeston,RonJWeiss,andHectorYee.2013.Nonlinearlatentfactorization
+REFERENCES byembeddingmultipleuserinterests.InProceedingsofthe7thACMconference
+onRecommendersystems.ACM,65–68.
+[1] ChristopherRAberger.2016.Recommender:Ananalysisofcollaborativefiltering [27] Hong-JianXue,XinyuDai,JianbingZhang,ShujianHuang,andJiajunChen.
+techniques.TechnicalReport. 2017.DeepMatrixFactorizationModelsforRecommenderSystems..InIJCAI.
+[2] SilvioAmir,ByronC.Wallace,HaoLyu,PaulaCarvalho,andMarioJ.Silva.2016. 3203–3209.
+ModellingContextwithUserEmbeddingsforSarcasmDetectioninSocialMedia. [28] MinYang,WeiZhao,JianboYe,ZeyangLei,ZhouZhao,andSoufeiZhang.2018.
+InProceedingsofThe20thSIGNLLConferenceonComputationalNaturalLanguage InvestigatingCapsuleNetworkswithDynamicRoutingforTextClassification.
+Learning.AssociationforComputationalLinguistics,167–177. InProceedingsofthe2018ConferenceonEmpiricalMethodsinNaturalLanguage
+[3] ZeynepBatmaz,AliYurekli,AlperBilge,andCihanKaleli.2018.Areviewon Processing.AssociationforComputationalLinguistics,3110–3119.
+deeplearningforrecommendersystems:challengesandremedies. Artificial [29] HongzhiYin,BinCui,LingChen,ZhitingHu,andXiaofangZhou.2015.Dynamic
+IntelligenceReview(2018),1–37. usermodelinginsocialmediasystems.ACMTransactionsonInformationSystems
+[4] RobertMBellandYehudaKoren.2007.Improvedneighborhood-basedcollabora- (TOIS)33,3(2015),10.
+tivefiltering.InKDDcupandworkshopatthe13thACMSIGKDDinternational [30] YangYu,XiaojunWan,andXinjieZhou.2016. Userembeddingforscholarly
+conferenceonknowledgediscoveryanddatamining.Citeseer,7–14. microblogrecommendation.InProceedingsofthe54thAnnualMeetingofthe
+[5] IvánCantador,AlejandroBellogín,andDavidVallet.2010.Content-basedrecom- AssociationforComputationalLinguistics(Volume2:ShortPapers),Vol.2.449–
+mendationinsocialtaggingsystems.InProceedingsofthefourthACMconference 453.
+onRecommendersystems.ACM,237–240. [31] GuoruiZhou,XiaoqiangZhu,ChenruSong,YingFan,HanZhu,XiaoMa,Yanghui
+[6] TaoChen,RuifengXu,YulanHe,YunqingXia,andXuanWang.2016. Learn- Yan,JunqiJin,HanLi,andKunGai.2018.Deepinterestnetworkforclick-through
+inguserandproductdistributedrepresentationsusingasequencemodelfor rateprediction.InProceedingsofthe24thACMSIGKDDInternationalConference
+sentimentanalysis.IEEEComputationalIntelligenceMagazine11,3(2016),34–44. onKnowledgeDiscovery&DataMining.ACM,1059–1068.
+[7] PaulCovington,JayAdams,andEmreSargin.2016. Deepneuralnetworks
+foryoutuberecommendations.InProceedingsofthe10thACMConferenceon
+RecommenderSystems.ACM,191–198.
+9

@@ -1,0 +1,703 @@
+Controllable Multi-Interest Framework for Recommendation
+YukuoCen†,JianweiZhang‡,XuZou†,ChangZhou‡,HongxiaYang‡∗,JieTang†∗
+†DepartmentofComputerScienceandTechnology,TsinghuaUniversity
+‡DAMOAcademy,AlibabaGroup
+{cyk18,zoux18}@mails.tsinghua.edu.cn
+{zhangjianwei.zjw,ericzhou.zc,yang.yhx}@alibaba-inc.com
+jietang@tsinghua.edu.cn
+ABSTRACT 1 INTRODUCTION
+Recently,neuralnetworkshavebeenwidelyusedine-commerce Thedevelopmentofe-commercerevolutionizedourshoppingstyles
+recommendersystems,owingtotherapiddevelopmentofdeep inrecentyears.Recommendersystemsplayafundamentalrole
+learning.Weformalizetherecommendersystemasasequentialrec- ine-commercecompanies.Traditionalrecommendationmethods
+ommendationproblem,intendingtopredictthenextitemsthatthe mainlyusecollaborativefilteringmethods[47,48]topredictscores
+usermightbeinteractedwith.Recentworksusuallygiveanoverall between users and items. Recently, neural networks have been
+embeddingfromauser’sbehaviorsequence.However,aunified widelyusedine-commercerecommendersystems,owingtothe
+userembeddingcannotreflecttheuser’smultipleinterestsduringa rapiddevelopmentofdeeplearning.Neuralrecommendersystems
+period.Inthispaper,weproposeanovelcontrollablemulti-interest generaterepresentationsforusersanditemsandoutperformtradi-
+frameworkforthesequentialrecommendation,calledComiRec. tionalrecommendationmethods.However,duetothelarge-scale
+Ourmulti-interestmodulecapturesmultipleinterestsfromuser e-commerceusersanditems,itishardtousedeepmodelstodi-
+behaviorsequences,whichcanbeexploitedforretrievingcandidate rectlygivetheclick-throughrate(CTR)predictionbetweeneach
+itemsfromthelarge-scaleitempool.Theseitemsarethenfedinto pairofusersanditems.CurrentindustrialpracticeistousefastK
+anaggregationmoduletoobtaintheoverallrecommendation.The nearestneighbors(e.g.,Faiss[25])togeneratethecandidateitems
+aggregationmoduleleveragesacontrollablefactortobalancethe andthenuseadeepmodel(e.g.,xDeepFM[33])tointegratethe
+recommendationaccuracyanddiversity.Weconductexperiments attributesofusersanditemstooptimizethebusinessmetricssuch
+for the sequential recommendation on two real-world datasets, asCTR.
+AmazonandTaobao.Experimentalresultsdemonstratethatour Somerecentworksleveragegraphembeddingmethodstoobtain
+frameworkachievessignificantimprovementsoverstate-of-the-art representationsforusersanditems,whichcanbeusedfordown-
+models1.Ourframeworkhasalsobeensuccessfullydeployedon streamapplications.Forexample,PinSage[56]buildsonGraph-
+theofflineAlibabadistributedcloudplatform. SAGE [15] and has applied graph convolutional network based
+methodstoproduction-scaledatawithbillionsofnodesandedges.
+CCSCONCEPTS GATNE[6]considersdifferentuserbehaviortypesandleveragesa
+•Informationsystems→Recommendersystems;•Com- heterogeneousgraphembeddingmethodtolearnrepresentations
+putingmethodologies→Neuralnetworks. forusersanditems.However,thiskindofmethodignoresthese-
+quentialinformationintheuserbehaviorsandcannotcapturethe
+KEYWORDS
+correlationsbetweenadjacentuserbehaviors.
+recommendersystem;sequentialrecommendation;multi-interest
+Recentresearches[7,27,36]formalizetherecommendersystem
+framework
+asasequentialrecommendationproblem.Withauser’sbehavior
+ACMReferenceFormat: history,thesequentialrecommendationtaskistopredictthenext
+YukuoCen,JianweiZhang,XuZou,ChangZhou,HongxiaYangandJie itemhe/shemightbeinterestedin.Thistaskreflectsthereal-world
+Tang.2020.ControllableMulti-InterestFrameworkforRecommendation.In recommendationsituation.Manyrecentmodelscangiveanoverall
+Proceedingsofthe26thACMSIGKDDConferenceonKnowledgeDiscoveryand embeddingforeachuserfromhis/herbehaviorsequence.However,
+DataMining(KDD’20),August23–27,2020,VirtualEvent,CA,USA.ACM, aunifieduserembeddingishardtorepresentmultipleinterests.
+NewYork,NY,USA,10pages.https://doi.org/10.1145/3394486.3403344
+Forexample,inFigure1,theclicksequenceshowsthreedifferent
+∗HongxiaYangandJieTangarethecorrespondingauthors. interestsofEmma.Asamoderngirl,Emmaisinterestedinjewelry,
+1Codeisavailableathttps://github.com/THUDM/ComiRec handbags,andmake-ups.Therefore,shemayclickitemsofthe
+threecategoriesduringthisperiodoftime.
+Permissiontomakedigitalorhardcopiesofallorpartofthisworkforpersonalor In this paper, we propose a novel controllable multi-interest
+classroomuseisgrantedwithoutfeeprovidedthatcopiesarenotmadeordistributed
+framework,calledComiRec.Ourmulti-interestmodulecancapture
+forprofitorcommercialadvantageandthatcopiesbearthisnoticeandthefullcitation
+onthefirstpage.CopyrightsforcomponentsofthisworkownedbyothersthanACM themultipleinterestsofusers,whichcanbeexploitedforretriev-
+mustbehonored.Abstractingwithcreditispermitted.Tocopyotherwise,orrepublish, ingcandidateitems.Ouraggregationmodulecombinestheseitems
+topostonserversortoredistributetolists,requirespriorspecificpermissionand/ora
+fee.Requestpermissionsfrompermissions@acm.org. fromdifferentinterestsandoutputstheoverallrecommendation.
+KDD’20,August23–27,2020,VirtualEvent,CA,USA Figure1showsamotivatingexampleofourmulti-interestframe-
+©2020AssociationforComputingMachinery. work.Weconductexperimentsforthesequentialrecommendation,
+ACMISBN978-1-4503-7998-4/20/08...$15.00
+whichissimilartoouronlinesituation.Theexperimentalresults
+https://doi.org/10.1145/3394486.3403344
+0202
+guA
+3
+]RI.sc[
+2v74390.5002:viXra
+
+Click Recommend
+user click sequence recommended items
+Emma
+Multi-Interest Aggregation
+Extraction Module Module
+Make-ups
+Jewelry
+Nearest
+Jewelry Make-ups
+Neighbors
+Handbags
+Handbags
+Figure 1: A motivating example of our proposed framework. An e-commerce platform user, Emma, has multiple interests
+includingjewelry,handbags,andmake-ups.Ourmulti-interestextractionmodulecancapturethesethreeinterestsfromher
+clicksequence.Eachinterestretrievesitemsfromthelarge-scaleitempoolbasedontheinterestembeddingindependently.
+Anaggregationmodulecombinesitemsfromdifferentinterestsandoutputstheoveralltop-NrecommendeditemsforEmma.
+showthatourframeworkoutperformsotherstate-of-the-artmod- non-linearityofneuralnetworksinmodelinghigher-orderfeature
+els. Our framework has also been successfully deployed on the interactions.DeepFM[14]designsanend-to-endlearningmodel
+Alibabadistributedcloudplatform.Resultsonthebillion-scalein- thatemphasizesbothlow-orderandhigh-orderfeatureinteractions
+dustrialdatasetfurtherconfirmtheeffectivenessandefficiencyof forCTRprediction.xDeepFM[33]extendsDeepFMandcanlearn
+ourmodelinpractice. specificbounded-degreefeatureinteractionsexplicitly.DeepMatrix
+Tosummarize,themaincontributionsofthispaperare: Factorization(DMF)[55]usesadeepstructurelearningarchitecture
+• Weproposeacomprehensiveframeworkthatintegratesthe tolearnacommonlowdimensionalspacefortherepresentations
+controllabilityandmulti-interestcomponentsinaunified ofusersanditemsbasedonexplicitratingsandnon-preference
+recommendersystem. implicitfeedback.DCN[53]keepsthebenefitsofadeepmodeland
+• Weinvestigatetheroleofcontrollabilityonpersonalized introducesanovelcrossnetworkthatismoreefficientinlearning
+systemsbyimplementingandstudyinginanonlinerecom- specificbounded-degreefeatureinteractions.CMN[12]usesdeep
+mendationscenario. architecturetounifythetwoclassesofCFmodelscapitalizingon
+• Ourframeworkachievesstate-of-the-artperformanceon thestrengthsoftheglobalstructureofthelatentfactormodeland
+tworeal-worldchallengingdatasetsforthesequentialrec- localneighborhood-basedstructureinanonlinearfashion.
+ommendation. SequentialRecommendation. Thesequentialrecommendation
+isthecrucialproblemofrecommendersystems.Manyrecentworks
+2 RELATEDWORK
+aboutrecommendersystemsfocusonthisproblem.FPMC[45]
+Inthissection,weintroducetherelatedliteratureaboutrecom- subsumesbothacommonMarkovchainandthenormalmatrix
+mendersystemsandrecommendationdiversity,aswellascapsule factorizationmodelforsequentialbasketdata.HRM[52]extends
+networksandtheattentionmechanismweusedinthepaper. theFPMCmodelandemploysatwo-layerstructuretoconstructa
+Collaborativefiltering[47,48]methodshavebeenprovensuc- hybridrepresentationoverusersanditemsfromthelasttransaction.
+cessful in real-world recommender systems, which find similar GRU4Rec[21]firstintroducesanRNN-basedapproachtomodelthe
+usersanditemsandmakerecommendationsonthisbasis.Matrix wholesessionformoreaccuraterecommendations.DREAM[57],
+factorizaion[30]isthemostpopulartechniqueinclassicalrecom- basedonRecurrentNeuralNetwork(RNN),learnsadynamicrep-
+menderresearch,whichmapsbothusersanditemstoajointlatent resentationofauserforrevealingtheuser’sdynamicinterests.Fos-
+factorspace,suchthatuser-iteminteractionsaremodeledasinner sil[17]integratessimilarity-basedmethodswithMarkovChains
+productsinthatspace.FactorizationMachines(FMs)[44]model smoothlytomakepersonalizedsequentialpredictionsonsparse
+allinteractionsbetweenvariablesusingfactorizedparametersand andlong-taileddatasets.TransRec[16]embedsitemsintoavec-
+thuscanestimateinteractionseveninproblemswithhugesparsity torspacewhereusersaremodeledasvectorsoperatingonitem
+likerecommendersystems. sequencesforlarge-scalesequentialprediction.RUM[7]usesa
+memory-augmentedneuralnetworkintegratedwiththeinsightsof
+NeuralRecommenderSystems. NeuralCollaborativeFiltering
+collaborativefilteringfortherecommendation.SASRec[27]usesa
+(NCF)[20]usesaneuralnetworkarchitecturetomodellatentfea-
+self-attentionbasedsequentialmodeltocapturelong-termseman-
+turesofusersanditems.NFM[19]seamlesslycombinesthelinear-
+ticsandusesanattentionmechanismtomakeitspredictionsbased
+ityofFMsinmodelingsecond-orderfeatureinteractionsandthe
+
+onrelativelyfewactions.DIN[60]designsalocalactivationunit Table1: Notations.
+toadaptivelylearntherepresentationofuserinterestsfrompast
+behaviorswithrespecttoacertainad.SDM[36]encodesbehavior Notation Description
+sequenceswithamulti-headself-attentionmoduletocapturemul- u auser
+tipletypesofinterestsandalong-shorttermgatedfusionmodule i anitem
+toincorporatelong-termpreferences. e aninteraction
+U thesetofusers
+RecommendationDiversity. Researchershaverealizedthatfol-
+I thesetofitems
+lowingonlythemostaccuratewayofrecommendationmaynot
+resultinthebestrecommendationresults,sincethehighestaccu- I u thesetoftestingitemsofuseru
+d thedimensionofuser/itemembeddings
+racyresultstendtorecommendsimilaritemstousers,yielding
+K thenumberofinterestembeddings
+boringrecommendationresults[41].Toaddresssuchproblems,
+N thenumberofcandidateitems
+thediversityoftherecommendeditemsalsoplaysasignificant
+role[49].Intermsofdiversity,thereisaggregateddiversity[1],
+Vu thematrixofinterestembeddingsofuseru
+δ(·) indicatorfunction
+whichreferstotheabilitytorecommend"long-tailitems"tousers.
+Manystudiesfocusonimprovingaggregateddiversityofrecom-
+mendationsystems[1,2,40,43].Otherworksfocusonthediversity
+ofitemsrecommendedtoindividualusers,i.e.,theindividualdi- stages,thematchingstageandtherankingstage.Thematching
+versity [1, 11, 26, 58], which refers to the dissimilarity of items stagecorrespondstoretrievingtop-Ncandidateitems,whilethe
+recommendedtoanindividualuser. rankingstageisusedforsortingthecandidateitemsbymoreprecise
+Attention Theoriginalityofattentionmechanismcanbetraced scores.Ourpapermainlyfocusesonimprovingtheeffectivenessin
+backtodecadesagoinfieldsofcomputervision[5,50].However, thematchingstage.Inthefollowingpartsofthissection,wewillin-
+itspopularityinvariousfieldsinmachinelearningcomesonlyin troduceourcontrollablemulti-interestframeworkandillustratethe
+recentyears.Itisfirstintroducedtomachinetranslationby[3], significanceofourframeworkforthesequentialrecommendation
+andlaterbecomesanoutbreakingmethodastensor2tensor [51]. problem.
+BERT[10]leveragestensor2tensorandachievesgiantsuccessinnat-
+3.2 Multi-InterestFramework
+urallanguageprocessing.Theattentionmechanismisalsoadapted
+torecommendersystems[6,59]andisratherusefulonreal-world Astheitempoolsofindustrialrecommendersystemsusuallycon-
+recommendationtasks. sistofmillionsorevenbillionsofitems,thematchingstageplays
+acrucialroleinrecommendersystems.Specifically,thematching
+CapsuleNetwork. Theconceptof“capsules”isfirstproposed
+modelfirstcomputesuserembeddingsfromuserhistoricalbehav-
+by[22]andhasbecomewell-knownsincethedynamicrouting
+iorsandthenretrievesacandidatesetofitemsforeachuserbased
+method[46]isproposed.MIND[31]introducescapsulesintorecom-
+ontheuserembedding.WiththehelpoffastKnearestneighbors
+mendationareasandusesthecapsulenetworktocapturemultiple
+(KNN)algorithmtoselecttheclosestitemsfromthelarge-scale
+interestsofe-commerceusersbasedondynamicroutingmecha-
+itempooltogenerateacandidatesetforeachuser,wemainlyfocus
+nism,whichisapplicableforclusteringpastbehaviorsandextract-
+onthecomputationofuserembeddings.Inotherwords,thedeci-
+ingdiverseinterests.CARP[32]firstlyextractstheviewpointsand
+sivefactorforthematchingstageisthequalityofuserembeddings
+aspectsfromtheuseranditemreviewdocumentsandderivesthe
+computedfromuserhistoricalbehaviors.
+representationofeachlogicunitbasedonitsconstituentviewpoint
+ExistingmatchingmodelsusuallyuseRNN[21,54]tocompute
+andaspectforratingprediction.
+embeddings for users, but most of them only generate a single
+embeddingvectorforeachuser.Thissuffersfromthelackofex-
+3 METHODOLOGY
+pressiveness of a single embedding since real-world customers
+Inthissection,weformulatetheproblemandintroducethepro- usuallyhaveseveralkindsofitemsintheirmindsandtheseitems
+posedframeworkindetail,aswellasshowingthedifferencebe- areoftenfordifferentusesandvaryalotincategories.Suchbe-
+tweenourframeworkandrepresentativeexistingmethods. haviorsofreal-worldcustomershighlighttheneedtousemultiple
+vectorstorepresenttheirmultipleinterests.Basedontheobser-
+3.1 ProblemFormulation vations,weproposeamulti-interestframeworkforthesequential
+recommendation.Theinputofourframeworkisauserbehavior
+Assumewehaveasetofusersu ∈ U andasetofitemsi ∈ I.
+sequence,whichcontainsalistofitemIDsrepresentingtheuser’s
+For each user, we have a sequence of user historical behaviors
+interactionswithitemsintimeorder.TheitemIDsarefedintoan
+(e
+1(u)
+,e
+2(u)
+,···,e
+n(u)
+),sortedbytimeoftheoccurrence.e
+t(u)
+records embeddinglayerandtransformedintoitemembeddings.Amulti-
+thetthiteminteractedbytheuser.Givenhistoricalinteractions,the interestextractionmodulereceivesitemembeddingsandgenerates
+problemofsequentialrecommendationistopredictthenextitems multipleinterestsforeachuser.
+thattheusermightbeinteractedwith.Notationsaresummarized Tobuildamulti-interestextractionmodule,therearemanyop-
+inTable1. tionalmethods.Inthispaper,weexploretwomethods,dynamic
+Inpractice,duetothestrictrequirementsoflatencyandper- routingmethodandself-attentivemethod,asourmulti-interestex-
+formance,industrialrecommendersystemsusuallyconsistoftwo tractionmodule.Ourframeworkusingadynamicroutingmethod
+
+Serving Training
+Aggregation
+Module Sampled Softmax Loss
+Nearest
+neighbors
+Select
+Multi-Interest
+Extraction
+Embedding Layer
+User Behavior Sequence (Item IDs)
+Figure2:Anoverviewofourmodelforthesequentialrecommendation.Theinputofourmodelisauserbehaviorsequence,
+whichcontainsalistofitemIDs.TheitemIDsarefedintotheembeddinglayerandtransformedintotheitemembeddings.
+Interestembeddingsaregeneratedthroughthemulti-interestextractionmoduleandcanbethenusedformodeltrainingand
+serving.Formodeltraining,thenearestinterestembeddingtothetargetembeddingwillbechosentocomputethesampled
+softmaxloss.Forserving,eachinterestembeddingwillindependentlyretrievetop-Nnearestitems,whicharethenfedinto
+theaggregationmodule.Theaggregationmodulegeneratestheoveralltop-Nitemsbyacontrollableprocedurethatbalances
+therecommendationaccuracyanddiversity.
+orself-attentivemethodisnamedasComiRec-DRorComiRec-SA, wherecij arethecouplingcoefficientsthataredeterminedbytheit-
+respectively. erativedynamicroutingprocess.Thecouplingcoefficientsbetween
+capsuleiandallthecapsulesinthenextlayershouldsumto1.We
+DynamicRouting. Weutilizeadynamicroutingmethodasa
+use“routingsoftmax”tocalculatethecouplingcoefficientsusing
+multi-interestextractionmoduleforuserbehaviorsequences.The
+itemembeddingsoftheusersequencecanbeviewedasprimary
+initiallogitsbij as
+c caa pp ss uu ll ee ss ., Wan ed ut sh ee thm eu dlt yi np ale mu icse rr ouin tit ner ge msts etc ha on db fre os mee Cn apas sNin et te [r 4e 6s ]t
+.
+cij =
+(cid:205)
+kex ep x( pb (i bj i) k), (3)
+Webrieflyintroducedynamicroutingforcomputingvectorinputs wherebij representsthelogpriorprobabilitythatcapsuleishould
+andoutputsofcapsules.Acapsuleisagroupofneuronswhose becoupledtocapsule j.Anon-linear"squashing"function[46]
+activityvectorsrepresenttheinstantiationparametersofaspecific isproposedtoensureshortvectorstogetshrunktoalmostzero
+typeofentitysuchasanobjectoranobjectpart[46].Thelength lengthandlongvectorstogetshrunktoalengthslightlybelow1.
+oftheoutputvectorofacapsulerepresentstheprobabilitythatthe Thenthevectorofofcapsulejiscomputedby
+entityrepresentedbythecapsuleisinthecurrentinput.Letei be
+t th he ec ca ap ps su ul le ei jo of ft th he ep nr eim xta lr ay yela ry be ar. seW de ot nhe pn rig miv ae ryth ce apco sum lep su .t Wat eio fin ro stf vj =squash(sj)= 1+∥s ∥j s∥ j2
+∥2
+∥ss jj ∥, (4)
+computethepredictionvectoras
+where sj isthe totalinput ofcapsule j. To calculatetheoutput
+eˆ j|i =Wijei, (1) capsulesvj,weneedtocalculatetheprobabilitydistributionbased
+ontheinnerproductionofvj andei.Thecalculationofvj relieson
+whereWij isatransformationmatrix.Thenthetotalinputtothe
+itself;thus,dynamicroutingmethodisproposedtosolvethisprob-
+capsulejistheweightedsumoverallpredictionvectorseˆ j|i as lem.ThewholedynamicroutingprocessislistedinAlgorithm1.
+sj
+=(cid:213)
+i
+cijeˆ j|i, (2)
+T mh ae tro ixu Vtp uut =in [vte 1r ,e ..s .t ,vc Kap ]s ∈ul Res d×o Kft fh oe rdu ose wr nu sta rere amth te an skf so .rmedasa
+
+Algorithm1:DynamicRouting Algorithm2:GreedyInference
+Input:primarycapsulesei,iterationtimesr,numberof Input:CandidateitemsetM,numberofoutputitemsN
+interestcapsulesK Output:OutputitemsetS
+Output:interestcapsules{vj,j =1,...,K}
+1
+S=(cid:156)
+1 foreachprimarycapsuleiandinterestcapsulej:initialize 2 foriter =1,···,N do
+bij =0. 3 j =argmax i∈M\S (cid:0) f(u,i)+λ(cid:205) k∈Sд(i,k)(cid:1)
+2 foriter =1,···,r do 4 S=S∪{j}
+3
+4
+f fo or re ea ac ch hp inr ti em rea sr ty cc aa pp ss uu ll ee ji :: sc ji == (cid:205)so ift cm ijWax i( jb ei i) ..
+5
+returnS
+5 foreachinterestcapsulej:vj =squash(sj).
+6 foreachprimarycapsuleiandinterestcapsulej:
+7
+returb nij {= vjb ,i jj =+ 1v ,⊤ j ..W .,Kij }ei. P θ(i|u)=
+(cid:205)
+k∈ex Ip e( xv pu⊤ (e vi u⊤)
+e
+k). (9)
+Theobjectivefunctionofourmodelistominimizethefollowing
+negativelog-likelihood
+Self-AttentiveMethod. Theself-attentivemethod[35]canalso
+(cid:213) (cid:213)
+beappliedtoourmulti-interestextractionmodule.Giventheem- loss = −logP (i|u). (10)
+θ
+beddingsofuserbehaviors,H ∈ Rd×n,wherenisthelengthof u∈Ui∈I
+u
+theusersequence,weusetheself-attentionmechanismtoobtaina
+Thesumoperatorofequation(9)iscomputationallyexpensive;
+vectorofweightsa∈Rn:
+thus,weuseasampledsoftmaxtechnique[9,24]totrainourmodel.
+a=softmax(w⊤
+2
+tanh(W1H))⊤,
+(5) OnlineServing. Foronlineserving,weuseourmulti-interest
+wherew2andW1aretrainableparameterswithsizeda andda×d, extractionmoduletocomputemultipleinterestsforeachuser.Each
+respectively.Thesuperscript⊤denotesthetransposeofthevector interestvectorofausercanindependentlyretrievetop-Nitems
+fromthelarge-scaleitempoolbythenearestneighborlibrarysuch
+orthematrix.Thevectorawithsizen representstheattention
+asFaiss[25].Theitemsretrievedbymultipleinterestsarefedinto
+weight of user behaviors. When we sum up the embeddings of
+anaggregationmoduletodeterminetheoverallitemcandidates.
+userbehaviorsaccordingtotheattentionweight,wecanobtaina
+vectorrepresentationvu =Hafortheuser.Fortheself-attentive Finally,theitemswithhigherrankingscoreswillberecommended
+forusers.
+methodtomakeuseoftheorderofusersequences,weaddtrainable
+positionalembeddings[51]totheinputembeddings.Thepositional
+3.3 AggregationModule
+embeddingshavethesamedimensiond astheitemembeddings
+andthetwocanbedirectlysummed. Afterthemulti-interestextractionmodule,weobtainmultipleinter-
+This vector representation focuses on and reflects a specific estembeddingsforeachuserbasedonhis/herpastbehavior.Each
+interestoftheuseru.Torepresenttheoverallinterestsoftheuser, interestembeddingcanindependentlyretrievetop-Nitemsbased
+weneedmultiplevu fromtheuserbehaviorsthatfocusondifferent ontheinnerproductionproximity.Buthowtoaggregatethese
+interests.Thusweneedtoperformmultipletimesofattention.We itemsfromdifferentintereststoobtaintheoveralltop-Nitems?A
+extendthew2 intoada-by-K matrixasW2.Thentheattention basicandstraightforwardwayistomergeandfiltertheitemsbased
+vectorabecomesanattentionmatrixAas ontheirinnerproductionproximitywithuserinterests,whichcan
+beformalizedas
+A=softmax(W⊤
+2
+tanh(W1H))⊤.
+(6)
+f(u,i)= max (e⊤v(k) ), (11)
+ThefinalmatrixofuserinterestsVu canbecomputedby 1≤k≤K i u
+Vu =HA. (7) wherev u(k) isthek-thinterestembeddingoftheuseru.Thisis
+aneffectivemethodfortheaggregationprocesstomaximizethe
+ModelTraining. Aftercomputingtheinterestembeddingsfrom recommendationaccuracy.However,itisnotallabouttheaccu-
+userbehaviorsthroughthemulti-interestextractionmodule,we racyofcurrentrecommendersystems.Peoplearemorelikelyto
+useanargmaxoperatortochooseacorrespondinguserembedding berecommendedwithsomethingneworsomethingdiverse.The
+vectorforatargetitemi: problemcanbeformulatedinthefollowing.GivenasetMwith
+K·N itemsretrievedfromKinterestsofauseru,findasetSwith
+vu =Vu[:,argmax(V u⊤ei)], (8) N itemssuchthatapre-definedvaluefunctionismaximized.Our
+frameworkusesacontrollableproceduretosolvethisproblem.We
+whereei denotestheembeddingofthetargetitemi,andVu isthe
+usethefollowingvaluefunctionQ(u,S)tobalancetheaccuracy
+matrixformedbyuserinterestembeddings.
+anddiversityoftherecommendationbyacontrollablefactorλ ≥0,
+Givenatrainingsample(u,i)withtheuserembeddingvu and
+(cid:213) (cid:213)(cid:213)
+theitemembeddingei,wecancomputethelikelihoodoftheuser Q(u,S)= f(u,i)+λ д(i,j). (12)
+uinteractingwiththeitemias i∈S i∈Sj∈S
+
+Table2: Statisticsofdatasets. userbehaviorsfromvalidationandtestuserstoinferuserembed-
+dingsfromtrainedmodelsandcomputemetricsbypredictingthere-
+Dataset #users #items #interactions maining20%userbehaviors.Thissettingismoredifficultthanweak
+AmazonBooks 459,133 313,966 8,898,041 generalizationwheretheusers’behaviorsequencesareusedduring
+Taobao 976,779 1,708,530 85,384,110 bothtrainingandevaluationprocesses[34].Indetail,weadopta
+commonsettingoftrainingsequentialrecommendationmodels.
+Letthebehaviorsequenceofuserube(e(u) ,e(u) ,...,e(u) ,...,e(u)
+).
+1 2 k n
+Eachtrainingsampleusesthefirstkbehaviorsofutopredictthe
+Hereд(i,j)isadiversityordissimilarityfunctionsuchas (k+1)-thbehavior,wherek =1,2,...,(n−1).
+д(i,j)=δ(CATE(i)(cid:44)CATE(j)). (13) Datasets. We conduct experiments on two challenging public
+datasets.ThestatisticsofthetwodatasetsareshowninTable2.
+whereCATE(i)meansthecategoryofitemiandδ(·)isanindicator • Amazon2consistsofproductreviewsandmetadatafrom
+function.Forthemostaccuratecase,i.e.,λ = 0,wejustusethe Amazon[18,39].Inourexperiment,weusetheBookscate-
+abovestraightforwardmethodtoobtaintheoverallitems.Forthe goryoftheAmazondataset.Eachtrainingsampleistrun-
+mostdiversecase,i.e.,λ = ∞,thecontrollablemodulefindsthe catedatlength20.
+mostdiverseitemsforusers.Westudythecontrollablefactorinthe • Taobao3collectsuserbehaviorsfromTaobao’srecommender
+Section4.3.Weproposeagreedyinferencealgorithmtoapproxi- systems[61].Inourexperiment,weonlyusetheclickbe-
+matelymaximizethevaluefunctionQ(u,S),whichislistedinthe haviorsandsortthebehaviorsfromoneuserbytime.Each
+Algorithm2. trainingsampleistruncatedatlength50.
+3.4 ConnectionswithExistingModels Competitors. Wecompareourproposedmodels,ComiRec-SA
+andComiRec-DR,withstate-of-the-artmodels.Inourexperimental
+Wemakeacomparisonbetweenourmodelandexistingmodels.
+setting,modelsshouldgivethepredictionfortheunseenusers
+MIMN. MIMN[42],arecentrepresentativeworkfortherank- ofvalidationandtestsets.Thusfactorization-basedmethodsare
+ingstageofrecommendation,usesmemorynetworkstocapture inappropriateforthissetting.
+userinterestsfromlongsequentialbehaviordata.BothMIMNand • MostPopularisatraditionalrecommendationmethodthat
+ourmodeltargetatthemultipleinterestsofusers.Forverylong recommendsthemostpopularitemstousers.
+sequentialbehaviors,amemory-basedarchitecturemayalsobe • YouTubeDNN[9]isoneofthemostsuccessfuldeeplearn-
+insufficienttocapturethelong-terminterestsofusers.Compared ingmodelsforindustrialrecommendersystems.
+withMIMN,ourmodelutilizesthemulti-interestextractionmodule • GRU4Rec[21]isthefirstworkthatintroducesrecurrent
+toleveragemultipleinterestsofusersinsteadofacomplicatedmem- neuralnetworksfortherecommendation.
+orynetworkwithmemoryutilizationregularizationandmemory • MIND[31]isarecentstate-of-the-artmodelrelatedwith
+inductionunit. ourmodel.Itdesignsamulti-interestextractorlayerbased
+MIND. MIND[31],arecentrepresentativeworkforthematch- onthecapsuleroutingmechanism,whichisapplicablefor
+ingstageofrecommendation,proposesaBehavior-to-Interest(B2I) clusteringpastbehaviorsandextractingdiverseinterests.
+dynamicroutingforadaptivelyaggregatinguser’sbehaviorsintoin-
+ImplementationNotes. Thecodeusedbyourexperimentsis
+terestrepresentationvectors.ComparedwithMIND,ComiRec-DR implementedwithTensorFlow41.14inPython3.6.
+followstheoriginaldynamicroutingmethodusedbyCapsNet[46],
+whichcancapturethesequentialinformationofuserbehaviors. ParameterConfiguration. Thenumberofdimensionsdforem-
+Our framework also explores a self-attentive method for multi- beddingsissetto64.Thenumberofsamplesforsampledsoftmax
+interestextraction.Moreover,ourframeworkutilizesacontrollable lossissetto10.Thenumberofmaximumtrainingiterationsisset
+aggregationmoduletobalancetherecommendationaccuracyand to1million.Thenumberofinterestembeddingsformulti-interest
+diversitybasedonusers’multipleinterests. modelsissetto4.WeuseAdamoptimizer[29]withlearningrate
+lr =0.001foroptimization.
+4 EXPERIMENTS
+EvaluationMetrics. Weusethefollowingmetricstoevaluatethe
+Inthissection,weexperimentonthesequentialrecommendation performanceofourproposedmodel.Weusethreecommonlyused
+toevaluatetheperformanceofourframeworkcomparedwithother evaluationcriteriainourexperiments.
+state-of-the-artmethods.Besides,wealsoreporttheexperimental • Recall.Weadoptper-useraverageinsteadofglobalaverage
+resultsofourframeworkonabillion-scaleindustrialdataset. forbetterinterpretability[7,28].
+4.1 ExperimentalSetup Recall@N= 1 (cid:213) |Iˆ u,N ∩I u| , (14)
+|U| |I |
+Weevaluatetheperformanceofallmethodsunderstronggeneral- u∈U u
+ization[34,37,38]:Wesplitallusersintotraining/validation/test
+2http://jmcauley.ucsd.edu/data/amazon/
+setsbytheproportionof8:1:1.Wetrainmodelsusingtheentireclick 3https://tianchi.aliyun.com/dataset/dataDetail?dataId=649&userId=1
+sequencesoftrainingusers.Toevaluate,wetakethefirst80%ofthe 4https://www.tensorflow.org/
+
+Table3:Modelperformanceonpublicdatasets.Boldednumbersarethebestperformanceofeachcolumn.Allthenumbersin
+thetablearepercentagenumberswith‘%’omitted.
+AmazonBooks Taobao
+Metrics@20 Metrics@50 Metrics@20 Metrics@50
+Recall NDCG HitRate Recall NDCG HitRate Recall NDCG HitRate Recall NDCG HitRate
+MostPopular 1.368 2.259 3.020 2.400 3.936 5.226 0.395 2.065 5.424 0.735 3.603 9.309
+YouTubeDNN 4.567 7.670 10.285 7.312 12.075 15.894 4.205 14.511 28.785 6.172 20.248 39.108
+GRU4Rec 4.057 6.803 8.945 6.501 10.369 13.666 5.884 22.095 35.745 8.494 29.396 46.068
+MIND 4.862 7.933 10.618 7.638 12.230 16.145 6.281 20.394 38.119 8.155 25.069 45.846
+ComiRec-SA 5.489 8.991 11.402 8.467 13.563 17.202 6.900 24.682 41.549 9.462 31.278 51.064
+ComiRec-DR 5.311 9.185 12.005 8.106 13.520 17.583 6.890 24.007 41.746 9.818 31.365 52.418
+whereIˆ u,N denotesthesetoftop-Nrecommendeditemsfor Table 4: Model performance of parameter sensitivity. All
+useruandI u isthesetoftestingitemsforuseru. thenumbersarepercentagenumberswith‘%’omitted.
+• HitRate.Hitrate(HR)measuresthepercentagethatrec-
+ommended items contain at least one correct item inter- AmazonBooks Taobao
+actedbytheuser,whichhasbeenwidelyusedinprevious Metric@50 Recall NDCG Recall NDCG
+works[7,28]. ComiRec-SA(K=2) 8.835 14.273 9.935 32.873
+ComiRec-SA(K=4) 8.467 13.563 9.462 31.278
+1 (cid:213)
+HR@N= |U| δ(|Iˆ u,N ∩I u| >0), (15) ComiRec-SA(K=6) 8.901 14.167 9.378 31.020
+u∈U ComiRec-SA(K=8) 8.547 13.631 9.493 31.196
+ComiRec-DR(K=2) 7.081 12.068 9.293 30.735
+whereδ(·)istheindicatorfunction.
+ComiRec-DR(K=4) 8.106 13.520 9.818 31.365
+• NormalizedDiscountedCumulativeGain.Normalized
+ComiRec-DR(K=6) 7.904 13.219 10.836 34.048
+DiscountedCumulativeGain(NDCG)takesthepositionsof
+ComiRec-DR(K=8) 7.760 12.900 10.841 33.895
+correctrecommendeditemsintoconsideration[23].
+NDCG@N= 1 DCG@N= 1 1 (cid:213) (cid:213)N δ(iˆ u,k ∈I u) , (16) T tra ob ll le ab5 l: eM sto ud de yl .p Aer llfo tr hm ea nn uc meo bf eA rsm aa rz eon ped ra ct ea ns te at gf eor nt uh me bco ern s-
+Z Z |U| log (k+1)
+u∈Uk=1 2 with‘%’omitted.
+whereiˆ denotesthek-threcommendeditemfortheuser
+u,k ComiRec-SA(K=4) ComiRec-DR(K=4)
+u,andZ isanormalizationconstantdenotingtheidealdis-
+Metric@50 Recall Diversity Recall Diversity
+countedcumulativegain(IDCG@N),whichisthemaximum
+λ=0.00 8.467 23.237 8.106 19.036
+possiblevalueofDCG@N.
+λ=0.05 8.347 38.808 7.931 42.915
+λ=0.10 8.229 46.731 7.850 46.258
+4.2 QuantitativeResults λ=0.15 8.142 51.135 7.820 46.912
+Tomakeafaircomparisonwithothermodels,wesetλ=0inour λ=0.20 8.086 53.671 7.783 47.581
+aggregationmodule.Wegiveadetailedillustrationofretrieving λ=0.25 8.034 55.100 7.764 48.375
+top-Nitemsofourframework.Forourframework,eachinterest
+ofauserindependentlyretrievestop-Ncandidateitems.Thus,our
+modelretrievesatotalofK·N itemsforeachuser.Wesorttheitems ParameterSensitivity. Weinvestigatethesensitivityofthenum-
+bytheinnerproductoftheitemembeddingandthecorresponding berofinterestsK ofourframework.Table4illustratestheperfor-
+interestembedding.Afterthesorting,top-NitemsfromtheseK·N manceofourframeworkwhenthehyperparameterKchanges.Our
+itemsareviewedasthefinalcandidateitemsofourmodel.The twomodelsshowthedifferentpropertiesofthishyperparameter.
+wayofretrievingcandidateitemsisalsoappliedtoMIND.The FortheAmazondataset,ComiRec-SAobtainsthebetterperfor-
+modelperformanceforthesequentialrecommendationisshown mancewhenK =2,6andComiRec-DRgetsthebestresultwhen
+inTable3.Ourmodelsoutperformallstate-of-the-artmodelsbya K = 4.FortheTaobaodataset,ComiRec-DRgetsbetterperfor-
+widemarginonalltheevaluationcriteria.GRU4Recobtainsthebest mancewhenK increasesfrom2to8butComiRec-SAobtainsthe
+performanceoverothermodelsthatonlyoutputsingleembedding bestresultwhenK =2.
+foreachuser.ComparedwithMIND,ComiRec-DRobtainsbetter
+4.3 ControllableStudy
+performanceduetothedifferenceofthedynamicroutingmethod.
+ComiRec-SAshowsthestrongabilitytocaptureuserinterestsby Toobtainthefinaltop-Ncandidateitemsforeachuser,wepropose
+the self-attention mechanism and gets comparable results with anovelmoduletoaggregatetheitemsretrievedbydifferentinter-
+ComiRec-DR. estsofeachuser.Inadditiontoaimatachievinghighprediction
+
+Table6: Statisticsoftheindustrialdataset Interest 1: sweets
+Dataset #users #items #interactions
+Industrial 145,606,322 22,554,170 4,322,505,616
+Interest 2: gift boxes
+accuracyfortherecommendation,somestudiessuggesttheneed
+fordiversifiedrecommendationstoavoidmonotonyandimprove
+Interest 3: phone cases
+customers’experience[8,13].
+Recommendationdiversityplaysamoreimportantroleincur-
+rent recommender systems. Many pieces of research target on
+improving the recommendation diversity [4, 43]. Our proposed
+Interest 4: accessories
+aggregationmodulecancontrolthebalanceofrecommendationac-
+curacyanddiversity.Weusethefollowingdefinitionofindividual
+diversitybasedonitemcategories:
+Diversity@N=
+(cid:205)N j=1(cid:205) kN =j+1δ(CATE(iˆ u,j)(cid:44)CATE(iˆ u,k))
+,
+frG omen (cid:1)e (cid:2)ra (cid:3)t (cid:4)e
+c
+f lo icu kr sin et qe ure es nt cs
+e
+iteR me t pri oe ove
+l
+bd
+y
+f r io nm
+te
+rt eh se
+t
+l ea mrg be e-s dc da inle
+g s
+N ×(N −1)/2
+(17)
+whereCATE(i)isthecategoryofitemi,iˆ u,j denotesthej-threc- Figure3:Acasestudyofane-commerceuser.Wegenerate
+fourinterestembeddingsfromtheclicksequenceofauser
+ommendeditemfortheuseru,andδ(·)isanindicatorfunction.
+byourmodel.Wefindthatthefourinterestsoftheuserare
+Table5showsthemodelperformanceoftheAmazondataset
+about sweets, gift boxes, phone cases, and accessories. We
+whenwecontrolthefactorλtobalancetherecommendationquality
+reportthoseitemsintheclicksequencethatcorrespondto
+anddiversity.Fromthetable,recommendationdiversityincreases
+thefourinterests.Therightpartshowstheitemsretrieved
+substantiallyandrecalldecreasesslightlywhenthecontrollable
+fromtheindustrialitempoolbyinterestembeddings.
+factorλincreases.Ouraggregationmodulecanachievetheopti-
+mumtrade-offbetweentheaccuracyanddiversitybychoosingan
+appropriatevalueforthehyperparameterλ.
+4.4 IndustrialResults Despitethat,ourmodelstillcanlearntheitemcategoriesfrom
+userbehaviorsequences.Eachinterestlearnedbyourmodelap-
+WefurtherexperimentontheindustrialdatasetcollectedbyMobile
+proximatelycorrespondstoonespecificcategoryandcanretrieve
+TaobaoApponFebruary8th,2020.Thestatisticsoftheindustrial
+similaritemsofthesamecategoryfromthelarge-scaleindustrial
+datasetareshownintheTable6.Theindustrialdatasetcontains22
+itempool.
+millionhigh-qualityitems,145millionusers,and4billionbehaviors
+betweenthem.
+5 CONCLUSION
+OurframeworkhasbeendeployedontheAlibabadistributed
+cloudplatform,whereeverytwoworkersshareanNVIDIATesla Inthispaper,weproposeanovelcontrollablemulti-interestframe-
+P100GPUwith16GBmemory.Wesplittheusersandusetheclick workforthesequentialrecommendation.Ourframeworkusesa
+sequencesoftraininguserstotrainourmodel.Toevaluate,weuse multi-interestextractionmoduletogeneratemultipleuserinterests
+ourmodeltocomputemultipleinterestsforeachuserinthetest andusesanaggregationmoduletoobtaintheoveralltop-Nitems.
+set.Eachinterestvectorofauserindependentlyretrievestop-N Experimentalresultsdemonstratethatourmodelscanachievesig-
+itemsfromthelarge-scaleitempoolbyafastnearestneighbor nificantimprovementsoverstart-of-the-artmodelsontwochalleng-
+method.Theitemsretrievedbydifferentuserinterestsarefedinto ingdatasets.Ourframeworkhasalsobeensuccessfullydeployedon
+ouraggregationmodule.Afterthismodule,top-NitemsoutofK·N theAlibabadistributedcloudplatform.Resultsonthebillion-scale
+itemsarethefinalcandidateitemsandareusedtocomputethe industrialdatasetfurtherconfirmtheeffectivenessandefficiency
+evaluationmetric,recall@50. ofourframeworkinpractice.Recommendersystemsstartanew
+Weconductanofflineexperimentbetweenourframeworkand phaseowingtotherapiddevelopmentofdeeplearning.Traditional
+thestate-of-the-artsequentialrecommendationmethod,MIND[31], recommendationmethodscannotmeettherequirementsofthe
+whichhasshownsignificantimprovementintherecommender industry.Forthefuture,weplantoleveragememorynetworks
+systemofAlibabaGroup.Theexperimentalresultdemonstrates tocapturetheevolvinginterestsofusersandintroducecognitive
+thatourComiRec-SAandComiRec-DRimproverecall@50by1.39% theorytomakebetterusermodeling.
+and8.65%comparedwithMIND,respectively.
+ACKNOWLEDGMENTS
+CaseStudy. FromtheFigure3,wecanseethatourmodellearns
+fourdifferentinterestsoftheuserfromherclicksequence.Itis TheworkissupportedbytheNSFCforDistinguishedYoungScholar
+worthnotingthatourmodelonlyusesitemIDsfortrainingand (61825602),NSFC(61836013),andaresearchfundsupportedby
+doesnotusethemanuallydefinedcategoryinformationofitems. AlibabaGroup.
+
+REFERENCES
+[32] ChenliangLi,CongQuan,LiPeng,YunweiQi,YumingDeng,andLibingWu.
+[1] GediminasAdomaviciusandYoungOkKwon.2011.Improvingaggregaterec- 2019.ACapsuleNetworkforRecommendationandExplainingWhatYouLike
+ommendationdiversityusingranking-basedtechniques. TKDE24,5(2011), andDislike.InSIGIR’19.ACM,275–284.
+896–911. [33] JianxunLian,XiaohuanZhou,FuzhengZhang,ZhongxiaChen,XingXie,and
+[2] SujoyBag,AbhijeetGhadge,andManojKumarTiwari.2019. Anintegrated GuangzhongSun.2018. xDeepFM:Combiningexplicitandimplicitfeature
+recommendersystemforimprovedaccuracyandaggregatediversity.Computers interactionsforrecommendersystems.InKDD’18.ACM,1754–1763.
+&IndustrialEngineering130(2019),187–197. [34] DawenLiang,RahulGKrishnan,MatthewDHoffman,andTonyJebara.2018.
+[3] DzmitryBahdanau,KyunghyunCho,andYoshuaBengio.2014. Neuralma- Variationalautoencodersforcollaborativefiltering.InWWW’18.689–698.
+chinetranslationbyjointlylearningtoalignandtranslate. arXivpreprint [35] ZhouhanLin,MinweiFeng,CiceroNogueiradosSantos,MoYu,BingXiang,
+arXiv:1409.0473(2014). BowenZhou,andYoshuaBengio.2017. Astructuredself-attentivesentence
+[4] KeithBradleyandBarrySmyth.2001.Improvingrecommendationdiversity.In embedding.InICLR’17.
+AICS’01.Citeseer,85–94. [36] FuyuLv,TaiweiJin,ChanglongYu,FeiSun,QuanLin,KepingYang,andWil-
+[5] PeterJBurt.1988. Attentionmechanismsforvisioninadynamicworld.In fredNg.2019. SDM:Sequentialdeepmatchingmodelforonlinelarge-scale
+ICPR’88.IEEE,977–987. recommendersystem.InCIKM’19.2635–2643.
+[6] YukuoCen,XuZou,JianweiZhang,HongxiaYang,JingrenZhou,andJieTang. [37] JianxinMa,ChangZhou,PengCui,HongxiaYang,andWenwuZhu.2019.Learn-
+2019.Representationlearningforattributedmultiplexheterogeneousnetwork. ingdisentangledrepresentationsforrecommendation.InNIPS’19.5712–5723.
+InKDD’19.1358–1368. [38] BenjaminMarlin.2004.Collaborativefiltering:Amachinelearningperspective.
+[7] XuChen,HongtengXu,YongfengZhang,JiaxiTang,YixinCao,ZhengQin,and UniversityofTorontoToronto.
+HongyuanZha.2018.Sequentialrecommendationwithusermemorynetworks. [39] JulianMcAuley,ChristopherTargett,QinfengShi,andAntonVanDenHengel.
+InWSDM’18.ACM,108–116. 2015.Image-basedrecommendationsonstylesandsubstitutes.InSIGIR’15.ACM,
+[8] PeizheCheng,ShuaiqiangWang,JunMa,JiankaiSun,andHuiXiong.2017. 43–52.
+Learningtorecommendaccurateanddiverseitems.InWWW’17.183–192. [40] KatjaNiemannandMartinWolpers.2013.Anewcollaborativefilteringapproach
+[9] PaulCovington,JayAdams,andEmreSargin.2016.Deepneuralnetworksfor forincreasingtheaggregatediversityofrecommendersystems.InKDD’13.955–
+youtuberecommendations.InRecSys’16.ACM,191–198. 963.
+[10] JacobDevlin,Ming-WeiChang,KentonLee,andKristinaToutanova.2018.Bert: [41] UmbertoPanniello,AlexanderTuzhilin,andMicheleGorgoglione.2014.Com-
+Pre-trainingofdeepbidirectionaltransformersforlanguageunderstanding.arXiv paringcontext-awarerecommendersystemsintermsofaccuracyanddiversity.
+preprintarXiv:1810.04805(2018). UMUAI24,1-2(2014),35–65.
+[11] TommasoDiNoia,VitoClaudioOstuni,JessicaRosati,PaoloTomeo,andEu- [42] QiPi,WeijieBian,GuoruiZhou,XiaoqiangZhu,andKunGai.2019. Practice
+genioDiSciascio.2014. Ananalysisofusers’propensitytowarddiversityin onlongsequentialuserbehaviormodelingforclick-throughrateprediction.In
+recommendations.InRecSys’14.285–288. KDD’19.2671–2679.
+[12] TravisEbesu,BinShen,andYiFang.2018.Collaborativememorynetworkfor [43] LijingQinandXiaoyanZhu.2013.Promotingdiversityinrecommendationby
+recommendationsystems.InSIGIR’18.ACM,515–524. entropyregularizer.InIJCAI’13.
+[13] AnupriyaGognaandAngshulMajumdar.2017.Balancingaccuracyanddiversity [44] SteffenRendle.2010.Factorizationmachines.InICDM’10.IEEE,995–1000.
+inrecommendationsusingmatrixcompletionframework. Knowledge-Based [45] SteffenRendle,ChristophFreudenthaler,andLarsSchmidt-Thieme.2010.Factor-
+Systems125(2017),83–95. izingpersonalizedmarkovchainsfornext-basketrecommendation.InWWW’10.
+[14] HuifengGuo,RuimingTang,YunmingYe,ZhenguoLi,andXiuqiangHe.2017. ACM,811–820.
+DeepFM:afactorization-machinebasedneuralnetworkforCTRprediction.In [46] SaraSabour,NicholasFrosst,andGeoffreyEHinton.2017. Dynamicrouting
+IJCAI’17. betweencapsules.InNIPS’17.3856–3866.
+[15] WillHamilton,ZhitaoYing,andJureLeskovec.2017.Inductiverepresentation [47] BadrulMunirSarwar,GeorgeKarypis,JosephAKonstan,JohnRiedl,etal.2001.
+learningonlargegraphs.InNIPS’17.1024–1034. Item-basedcollaborativefilteringrecommendationalgorithms.WWW’01(2001),
+[16] RuiningHe,Wang-ChengKang,andJulianMcAuley.2017.Translation-based 285–295.
+recommendation.InRecSys’17.ACM,161–169. [48] JBenSchafer,DanFrankowski,JonHerlocker,andShiladSen.2007.Collaborative
+[17] RuiningHeandJulianMcAuley.2016. Fusingsimilaritymodelswithmarkov filteringrecommendersystems.InTheadaptiveweb.Springer,291–324.
+chainsforsparsesequentialrecommendation.InICDM’16.IEEE,191–200. [49] MalcolmSlaneyandWilliamWhite.2006. Measuringplaylistdiversityfor
+[18] RuiningHeandJulianMcAuley.2016. Upsanddowns:Modelingthevisual recommendationsystems.InAMCMM’06workshop.77–82.
+evolutionoffashiontrendswithone-classcollaborativefiltering.InWWW’16. [50] YaoruSunandRobertFisher.2003.Object-basedvisualattentionforcomputer
+InternationalWorldWideWebConferencesSteeringCommittee,507–517. vision.Artificialintelligence146,1(2003),77–123.
+[19] XiangnanHeandTat-SengChua.2017.Neuralfactorizationmachinesforsparse [51] AshishVaswani,NoamShazeer,NikiParmar,JakobUszkoreit,LlionJones,
+predictiveanalytics.InSIGIR’17.ACM,355–364. AidanNGomez,ŁukaszKaiser,andIlliaPolosukhin.2017. Attentionisall
+[20] XiangnanHe,LiziLiao,HanwangZhang,LiqiangNie,XiaHu,andTat-Seng youneed.InNIPS’17.5998–6008.
+Chua.2017. Neuralcollaborativefiltering.InWWW’17.InternationalWorld [52] PengfeiWang,JiafengGuo,YanyanLan,JunXu,ShengxianWan,andXueqi
+WideWebConferencesSteeringCommittee,173–182. Cheng.2015.Learninghierarchicalrepresentationmodelfornextbasketrecom-
+[21] BalázsHidasi,AlexandrosKaratzoglou,LinasBaltrunas,andDomonkosTikk. mendation.InSIGIR’15.ACM,403–412.
+2016. Session-basedrecommendationswithrecurrentneuralnetworks.In [53] RuoxiWang,BinFu,GangFu,andMingliangWang.2017.Deep&crossnetwork
+ICLR’16. foradclickpredictions.InADKDD’17.ACM,12.
+[22] GeoffreyEHinton,AlexKrizhevsky,andSidaDWang.2011. Transforming [54] Chao-YuanWu,AmrAhmed,AlexBeutel,AlexanderJSmola,andHowJing.
+auto-encoders.InICANN’11.Springer,44–51. 2017.Recurrentrecommendernetworks.InWSDM’17.ACM,495–503.
+[23] KalervoJärvelinandJaanaKekäläinen.2000.IRevaluationmethodsforretrieving [55] Hong-JianXue,XinyuDai,JianbingZhang,ShujianHuang,andJiajunChen.
+highlyrelevantdocuments.InSIGIR’00.ACM,41–48. 2017.DeepMatrixFactorizationModelsforRecommenderSystems..InIJCAI’17.
+[24] SébastienJean,KyunghyunCho,RolandMemisevic,andYoshuaBengio.2015. 3203–3209.
+Onusingverylargetargetvocabularyforneuralmachinetranslation.ACL’15. [56] RexYing,RuiningHe,KaifengChen,PongEksombatchai,WilliamLHamilton,
+[25] JeffJohnson,MatthijsDouze,andHervéJégou.2017. Billion-scalesimilarity andJureLeskovec.2018. Graphconvolutionalneuralnetworksforweb-scale
+searchwithGPUs.arXivpreprintarXiv:1702.08734(2017). recommendersystems.InKDD’18.ACM,974–983.
+[26] MKalaivananandKVengatesan.2013.Recommendationsystembasedonstatis- [57] FengYu,QiangLiu,ShuWu,LiangWang,andTieniuTan.2016. Adynamic
+ticalanalysisofrankingfromuser.InICICES’13.IEEE,479–484. recurrentmodelfornextbasketrecommendation.InSIGIR’16.ACM,729–732.
+[27] Wang-ChengKangandJulianMcAuley.2018.Self-attentivesequentialrecom- [58] TingYu,JunpengGuo,WenhuaLi,HarryJiannanWang,andLingFan.2019.
+mendation.InICDM’18.IEEE,197–206. Recommendationwithdiversity:Anadaptivetrust-awaremodel.DecisionSupport
+[28] GeorgeKarypis.2001. Evaluationofitem-basedtop-nrecommendationalgo- Systems123(2019),113073.
+rithms.InCIKM’01.ACM,247–254. [59] ChangZhou,JinzeBai,JunshuaiSong,XiaofeiLiu,ZhengchaoZhao,XiusiChen,
+[29] DiederikPKingmaandJimmyBa.2014.Adam:Amethodforstochasticopti- andJunGao.2018.Atrank:Anattention-baseduserbehaviormodelingframe-
+mization.arXivpreprintarXiv:1412.6980(2014). workforrecommendation.InAAAI’18.
+[30] YehudaKoren,RobertBell,andChrisVolinsky.2009.Matrixfactorizationtech- [60] GuoruiZhou,XiaoqiangZhu,ChenruSong,YingFan,HanZhu,XiaoMa,Yanghui
+niquesforrecommendersystems.Computer8(2009),30–37. Yan,JunqiJin,HanLi,andKunGai.2018.Deepinterestnetworkforclick-through
+[31] ChaoLi,ZhiyuanLiu,MengmengWu,YuchiXu,PipeiHuang,HuanZhao, rateprediction.InKDD’18.ACM,1059–1068.
+GuoliangKang,QiweiChen,WeiLi,andDikLunLee.2019. Multi-Interest [61] HanZhu,XiangLi,PengyeZhang,GuozhengLi,JieHe,HanLi,andKunGai.
+NetworkwithDynamicRoutingforRecommendationatTmall.arXivpreprint 2018. Learningtree-baseddeepmodelforrecommendersystems.InKDD’18.
+arXiv:1904.08030(2019). ACM,1079–1088.
+
+A APPENDIX Algorithm3:ComiRec
+Intheappendix,wegivetheimplementationnotesofourproposed Input:Userbehaviorsequences.
+models.Thedetailsofothermodelsanddescriptionsofdatasets 1 Initializeallthemodelparameters.
+arethengiven.
+2
+Generatetrainingsamples{(u,i)}withuserclicksequences.
+3 whilenotconvergeddo
+A.1 ImplementationNotes 4 foreachbatchfromtrainingsamplesdo
+5 ComputeVu usingmulti-interestextractionmodule.
+RunningEnvironment. Theexperimentsinthispapercanbe
+6 Computevu basedonEquation(8).
+dividedintotwoparts.Oneisconductedontwopublicdatasets
+7 ComputesampledsoftmaxlossusingEquation(10).
+usingasingleLinuxserverwith4Intel(R)Xeon(R)CPUE5-2680v4
+@2.40GHz,256GRAM,and8NVIDIAGeForceRTX2080Ti.The 8 UpdatemodelparametersbytheAdamoptimizer.
+codesofourproposedmodelsinthispartareimplementedwith
+TensorFlow5 1.14inPython3.6.Theotherpartisconductedon
+theindustrialdatasetusingAlibaba’sdistributedcloudplatform6
+• MostPopular is a non-personalized method that recom-
+whichcontainsthousandsofworkers.Everytwoworkerssharean mendsthemostpopularitemstousers.Thismethoddoes
+NVIDIATeslaP100GPUwith16GBmemory.Ourproposedmodels notneedtrainingandweimplementitseparately.
+areimplementedwithTensorFlow1.4inPython2.7inthispart. • YouTubeDNNisoneofthemostsuccessfuldeeplearning
+ImplementationDetails. OurcodesusedbyasingleLinuxserver modelsforindustrialrecommendersystems.Weimplement
+can be split into three parts: data iterator, model training, and themodelinourcodebasedontheoriginalpaper.
+evaluation. For each training iteration, the data iterator selects • GRU4RECisthefirstworkthatintroducesrecurrentneu-
+randomtraininguserswithasizeofbatch_size.Foreachselected ralnetworksfortherecommendation.Weimplementthe
+user,werandomlyselectaniteminhis/herclicksequenceasthe modelbytf.nn.rnn_cell.GRUCellandtf.nn.dynamic_rnnof
+traininglabelandusetheitemsbeforethatitemasthetraining TensorFlowinourcode.
+sequence.Thetrainingpartisimplementedfollowingthetraining • MINDisarecentstate-of-the-artmodel.Weimplementthe
+loopintheAlgorithm3basedontheTensorflow1.xAPIs.Ourloss modelbasedontheoriginalpaperandaninternalversion
+functionisbasedontf.nn.sampled_softmax_loss.Theevaluation ofthecodeinAlibabaGroup.
+partrepliesonFaiss7,alibraryforefficientsimilaritysearchand
+A.3 Datasets
+clusteringofdensevectors.WeusetheGpuIndexFlatIP classof
+Faiss,whichimplementsanexactsearchfortheinnerproducton Ourexperimentsevaluateonthreedatasets,includingtwopublic
+GPU.Allmodelparametersareupdatedandoptimizedbystochastic datasetsandabillion-scaleindustrialdataset.Forthetwopublic
+gradientdescentwithAdamupdatingrule[29].Thedistributed datasets,wekeepusersanditemswithatleast5behaviors.
+versionofourproposedmodelsisimplementedbasedonthecoding • Amazon9consistsofproductreviewsandmetadatafrom
+rulesofAlibaba’sdistributedcloudplatforminordertomaximize Amazon[18,39].Inourexperiment,weusetheBookscat-
+thedistributionefficiency. egoryoftheAmazondataset.Foreachuseru,wesortthe
+reviewsfromtheuserbytime,andourtaskistopredict
+ParameterConfiguration. Ouruser/itemembeddingdimension
+whethertheuserwillwritethereviewfortheitembased
+dissetto64.Thenumberofsamplesforsampledsoftmaxlossis
+onpreviousreviews.Eachtrainingsampleistruncatedat
+setto10.Thenumberofmaximumtrainingiterationsissetto1
+length20.
+millionandallmodelsuseearlystoppingbasedontheRecall@50
+• Taobao10collectsuserbehaviorsfromTaobao’srecommender
+onthevalidationset.ThebatchsizefortheAmazondatasetand
+systems[61].Taobaodatasetrandomlyselectsabout1mil-
+Taobaodatasetissetto128and256,respectively.Thenumberof
+lion users who have behaviors including click, purchase,
+iterationsforthedynamicroutingmethodissetto3.Thenumber
+add-to-cart,andadd-to-preferencefromNovember25toDe-
+ofinterestembeddingsK formulti-interestmodelsissetto4for
+cember03,2017.Eachbehaviorisrepresentedbyfivefields,
+afaircomparison.WeusetheAdamoptimizer[29]withlearning
+ratelr =0.001foroptimization. whichconsistofuserID,itemID,item’scategoryID,behav-
+iortype,andtimestamp.Inourexperiment,weonlyusethe
+CodeandDatasetReleasingDetails. Thecodeofallmodels clickbehaviorsandsortthebehaviorsfromoneuserbytime.
+andourpartitionofthetwopublicdatasetsareavailable8.
+Eachtrainingsampleistruncatedatlength50.
+• IndustrialdatasetcollectsuserclickbehaviorsbyMobile
+A.2 ComparedMethods TaobaoApponFebruary8th,2020.Theindustrialdataset
+Wegivetheimplementationdetailsaboutallcomparedmethodsas contains22millionhigh-qualityitems,145millionusers,and
+follows. 4billionbehaviorsbetweenthem.Eachtrainingsampleis
+truncatedatlength40.
+5https://www.tensorflow.org/
+6https://data.aliyun.com/
+7https://github.com/facebookresearch/faiss 9http://jmcauley.ucsd.edu/data/amazon/
+8https://github.com/THUDM/ComiRec 10https://tianchi.aliyun.com/dataset/dataDetail?dataId=649&userId=1

@@ -1,0 +1,622 @@
+Deep Interest Evolution Network for Click-Through Rate Prediction
+GuoruiZhou*,NaMou†,YingFan,QiPi,WeijieBian,
+ChangZhou,XiaoqiangZhu and KunGai
+AlibabaInc,Beijing,China
+{guorui.xgr,mouna.mn,fanying.fy,piqi.pq,weijie.bwj,ericzhou.zc,xiaoqiang.zxq,jingshi.gk}@alibaba-inc.com
+Abstract captureuser’sinterestsaswellastheirdynamicsisthekey
+to advance the performance of CTR prediction. Recently,
+Click-through rate (CTR) prediction, whose goal is to esti-
+many CTR models transform from traditional methodolo-
+mate the probability of a user clicking on the item, has be-
+come one of the core tasks in the advertising system. For gies (Friedman 2001; Rendle 2010) to deep CTR mod-
+CTR prediction model, it is necessary to capture the latent els(Guoetal.2017;Quetal.2016;Lianetal.2018).Most
+userinterestbehindtheuserbehaviordata.Besides,consid- deep CTR models focus on capturing interaction between
+ering the changing of the external environment and the in- features from different fields and pay less attention to user
+ternalcognition,userinterestevolvesovertimedynamically. interestrepresentation.DeepInterestNetwork(DIN)(Zhou
+ThereareseveralCTRpredictionmethodsforinterestmod- et al. 2018c) emphasizes that user interests are diverse, it
+eling,whilemostofthemregardtherepresentationofbehav-
+usesattentionbasedmodeltocapturerelativeintereststotar-
+ior as the interest directly, and lack specially modeling for
+getitem,andobtainsadaptiveinterestrepresentation.How-
+latentinterestbehindtheconcretebehavior.Moreover,little
+ever,mostinterestmodelsincludingDINregardthebehav-
+workconsidersthechangingtrendoftheinterest.Inthispa-
+ior as the interest directly, while latent interest is hard to
+per,weproposeanovelmodel,namedDeepInterestEvolu-
+tion Network (DIEN), for CTR prediction. Specifically, we befullyreflectedbyexplicitbehavior.Previousmethodsne-
+design interest extractor layer to capture temporal interests glecttodigthetrueuserinterestbehindbehavior.Moreover,
+fromhistorybehaviorsequence.Atthislayer,weintroduce userinterestkeepsevolving,capturingthedynamicofinter-
+anauxiliarylosstosuperviseinterestextractingateachstep. estisimportantforinterestrepresentation.
+As user interests are diverse, especially in the e-commerce
+Based on all these observations, we propose Deep Inter-
+system, we propose interest evolving layer to capture inter-
+estevolvingprocessthatisrelativetothetargetitem.Atin- estEvolutionNetwork(DIEN)toimprovetheperformance
+terestevolvinglayer,attentionmechanismisembeddedinto of CTR prediction. There are two key modules in DIEN,
+thesequentialstructurenovelly,andtheeffectsofrelativein- one is for extracting latent temporal interests from explicit
+terestsarestrengthenedduringinterestevolution.Intheex- user behaviors, and the other one is for modeling interest
+perimentsonbothpublicandindustrialdatasets,DIENsig- evolving process. Proper interest representation is the foot-
+nificantlyoutperformsthestate-of-the-artsolutions.Notably, stoneofinterestevolvingmodel.Atinterestextractorlayer,
+DIENhasbeendeployedinthedisplayadvertisementsystem
+DIENchoosesGRU(Chungetal.2014)tomodelthedepen-
+ofTaobao,andobtained20.7%improvementonCTR.
+dencybetweenbehaviors.Followingtheprinciplethatinter-
+est leads to the consecutive behavior directly, we propose
+Introduction
+auxiliarylosswhichusesthenextbehaviortosupervisethe
+Cost per click (CPC) billing is one of the commonest learningofcurrenthiddenstate.Wecallthesehiddenstates
+billingformsintheadvertisingsystem,whereadvertisersare with extra supervision as interest states. These extra super-
+chargedforeachclickontheiradvertisement.InCPCadver- visioninformationhelpstocapturemoresemanticmeaning
+tisingsystem,theperformanceofclick-throughrate(CTR) forinterestrepresentationandpushhiddenstatesofGRUto
+prediction not only influences the final revenue of whole represent interests effectively. Moreover, user interests are
+platform,butalsoimpactsuserexperienceandsatisfaction. diverse,whichleadstointerestdriftingphenomenon:user’s
+ModelingCTRpredictionhasdrawnmoreandmoreatten- intentionscanbeverydifferentinadjacentvisitings,andone
+tionfromthecommunitiesofacademiaandindustry. behavior of a user may depend on the behavior that takes
+In most non-searching e-commerce scenes, users do not long time ago. Each interest has its own evolution track.
+expresstheircurrentintentionactively.Designingmodelto Meanwhile,theclickactionsofoneuserondifferenttarget
+items are effected by different parts of interests. At inter-
+*CorrespondingauthorisGuoruiZhou.
+estevolvinglayer,wemodeltheinterestevolvingtrajectory
+†This author is the one who did the really hard
+thatisrelativetotargetitem.Basedontheinterestsequence
+work for Online Testing. The source code is available at
+obtainedfrominterestextractorlayer,wedesignGRUwith
+https://github.com/mouna99/dien.
+Copyright©2019,AssociationfortheAdvancementofArtificial attentional update gate (AUGRU). Using interest state and
+Intelligence(www.aaai.org).Allrightsreserved. targetitemtocomputerelevance,AUGRUstrengthensrela-
+8102
+voN
+61
+]LM.tats[
+5v27630.9081:viXra
+
+tiveinterests’influenceoninterestevolution,whileweakens purchase history. He and McAuley (2016) build visually-
+irrelative interests’ effect that results from interest drifting. aware recommender system which surfaces products that
+Withtheintroductionofattentionalmechanismintoupdate more closely match users’ and communities’ evolving in-
+gate,AUGRUcanleadtothespecificinterestevolvingpro- terests. Zhang et al. (2014) measures users’ similarities
+cesses for different target items. The main contributions of basedonuser’sinterestsequence,andimprovestheperfor-
+DIENareasfollowing: mance of collaborative filtering recommendation. Parsana
+et al. (2018) improves native ads CTR prediction by using
+• We focus on interest evolving phenomenon in e-
+largescaleeventembeddingandattentionaloutputofrecur-
+commerce system, and propose a new structure of net-
+rent networks. ATRank (Zhou et al. 2018a) uses attention-
+work to model interest evolving process. The model for
+basedsequentialframeworktomodelheterogeneousbehav-
+interestevolutionleadstomoreexpressiveinterestrepre-
+iors. Compared to sequence-independent approaches, these
+sentationandmorepreciseCTRprediction.
+methodscansignificantlyimprovethepredictionaccuracy.
+• Different from taking behaviors as interests directly, we However,thesetraditionalRNNbasedmodelshavesome
+specially design interest extractor layer. Pointing at the problems. On the one hand, most of them regard hidden
+problemthathiddenstateofGRUislesstargetedforinter- states of sequential structure as latent interests directly,
+est representation, we propose one auxiliary loss. Auxil- whilethesehiddenstateslackspecialsupervisionforinterest
+iarylossusesconsecutivebehaviortosupervisethelearn- representation.Ontheotherhand,mostexistingRNNbased
+ingofhiddenstateateachstep.whichmakeshiddenstate modelsdealwithalldependenciesbetweenadjacentbehav-
+expressiveenoughtorepresentlatentinterest. iors successively and equally. As we know, not all user’s
+• We design interest evolving layer novelly, where GPU behaviors are strictly dependent on each adjacent behavior.
+withattentionalupdategate(AUGRU)strengthenstheef- Eachuserhasdiverseinterests,andeachinteresthasitsown
+fect from relevant interests to target item and overcomes evolving track. For any target item, these models can only
+theinferencefrominterestdrifting. obtainonefixedinterestevolvingtrack,sothesemodelscan
+bedisturbedbyinterestdrifting.
+In the experiments on both public and industrial datasets,
+In order to push hidden states of sequential structure to
+DIEN significantly outperforms the state-of-the-art solu-
+represent latent interests effectively, extra supervision for
+tions. It is notable that DIEN has been deployed in Taobao
+hidden states should be introdueced. DARNN (Ren et al.
+display advertisement system and obtains significant im-
+2018) uses click-level sequential prediction, which models
+provementundervariousmetrics.
+the click action at each time when each ad is shown to the
+user. Besides click action, ranking information can be fur-
+RelatedWork
+ther introduced. In recommendation system, ranking loss
+By virtue of the strong ability of deep learning on feature has been widely used for ranking task (Rendle et al. 2009;
+representation and combination, recent CTR models trans- Hidasi and Karatzoglou 2017). Similar to these ranking
+form from traditional linear or nonlinear models (Fried- losses,weproposeanauxiliarylossforinterestlearning.At
+man 2001; Rendle 2010) to deep models. Most deep mod- each step, the auxiliary loss uses consecutive clicked item
+els follow the structure of Embedding and Multi-ayer Per- againstnon-clickeditemtosupervisethelearningofinterest
+ceptron (MLP) (Zhou et al. 2018c). Based on this basic representation.
+paradigm, more and more models pay attention to the in- For capturing interest evolving process that is related
+teractionbetweenfeatures:BothWide&Deep(Chengetal. to target item, we need more flexible sequential learn-
+2016) and deep FM (Guo et al. 2017) combine low-order ing structure. In the area of question answering (QA),
+andhigh-orderfeaturestoimprovethepowerofexpression; DMN+ (Xiong, Merity, and Socher 2016) uses attention
+PNN (Qu et al. 2016) proposes a product layer to capture based GRU (AGRU) to push the attention mechanism to
+interactive patterns between interfield categories. However, be sensitive to both the position and ordering of the inputs
+thesemethodscannotreflecttheinterestbehinddataclearly. facts. In AGRU, the vector of the update gate is replaced
+DIN (Zhou et al. 2018c) introduces the mechanism of at- bythescalarofattentionscoresimply.Thisreplacementne-
+tentiontoactivatethehistoricalbehaviorsw.r.t.giventarget glectsthedifferencebetweenalldimensionsofupdategates,
+itemlocally,andcapturesthediversitycharacteristicofuser which contains rich information transmitted from previous
+interests successfully. However, DIN is weak in capturing sequence. Inspired by the novel sequential structure used
+thedependenciesbetweensequentialbehaviors. inQA,weproposeGRUwithattentionalgate(AUGRU)to
+In many application domains, user-item interactions can activaterelativeinterestsduringinterestevolving.Different
+be recorded over time. A number of recent studies show fromAGRU,attentionscoreinAUGRUactsontheinforma-
+that this information can be used to build richer individual tioncomputedfromupdategate.Thecombinationofupdate
+user models and discover additional behavioral patterns. In gateandattentionscorepushestheprocessofevolvingmore
+recommendation system, TDSSM (Song, Elkahky, and He specificallyandsensitively.
+2016)jointlyoptimizeslong-termandshort-termuserinter-
+ests to improve the recommendation quality; DREAM (Yu
+DeepInterestEvolutionNetwork
+et al. 2016) uses the structure of recurrent neural net-
+work (RNN) to investigate the dynamic representation of In this section, we introduce Deep Interest Evolution Net-
+each user and the global sequential behaviors of item- work(DIEN)indetail.First,wereviewthebasicDeepCTR
+
+model,namedBaseModel.Thenweshowtheoverallstruc- item. p(x) is the output of network, which is the predicted
+tureofDIENandintroducethetechniquesthatareusedfor probabilitythattheuserclickstargetitem.
+capturinginterestsandmodelinginterestevolutionprocess.
+DeepInterestEvolutionNetwork
+ReviewofBaseModel
+Differentfromsponsoredsearch,inmanye-commerceplat-
+The BaseModel is introduced from the aspects of feature forms like online display advertisement, users do not show
+representation,modelstructureandlossfunction. their intention clearly, so capturing user interest and their
+dynamicsisimportantforCTRprediction.DIENdevotesto
+FeatureRepresentation Inouronlinedisplaysystem,we
+capture user interest and models interest evolving process.
+usefourcategoriesoffeature:UserProfile,UserBehavior,
+As shown in Fig. 1, DIEN is composed by several parts.
+AdandContext.Itisnotablethattheadisalsoitem.Forgen-
+First, all categories of features are transformed by embed-
+eration,wecalltheadasthetargetiteminthispaper.Each
+ding layer. Next, DIEN takes two steps to capture interest
+category of feature has several fields, User Profile’s fields
+evolving: interest extractor layer extracts interest sequence
+are gender, age and so on; The fields of User Behavior’s
+based on behavior sequence; interest evolving layer mod-
+are the list of user visited goods id; Ad’s fields are ad id,
+els interest evolving process that is relative to target item.
+shop idandsoon;Context’sfieldsaretimeandsoon.Fea-
+Then final interest’s representation and embedding vectors
+ture in each field can be encoded into one-hot vector, e.g.,
+of ad, user profile, context are concatenated. The concate-
+the female feature in the category of User Profile are en-
+nated vector isfed into MLPfor final prediction. In the re-
+coded as [0,1]. The concat of different fields’ one-hot vec-
+mainingofthissection,wewillintroducetwocoremodules
+torsfromUserProfile,UserBehavior,AdandContextform
+ofDIENindetail.
+x ,x ,x ,x , respectively. In sequential CTR model, it’s
+p b a c
+remarkable that each field contains a list of behaviors, and Interest Extractor Layer In e-commerce system, user
+each behavior corresponds to a one-hot vector, which can behavior is the carrier of latent interest, and interest will
+be represented by x b = [b 1;b 2;··· ;b T] ∈ RK×T,b t ∈ changeafterusertakesonebehavior.Attheinterestextrac-
+{0,1}K, where b t is encoded as one-hot vector and repre- torlayer,weextractaseriesofintereststatesfromsequential
+sentst-thbehavior,T isthenumberofuser’shistorybehav- userbehaviors.
+iors,K isthetotalnumberofgoodsthatusercanclick. The click behaviors of user in e-commerce system are
+rich, where the length of history behavior sequence is long
+TheStructureofBaseModel MostdeepCTRmodelsare
+eveninashortperiodoftime,liketwoweeks.Forthebal-
+builtonthebasicstructureofembedding&MLR.Thebasic
+ance between efficiency and performance, we take GRU to
+structureiscomposedofseveralparts: model the dependency between behaviors, where the input
+• Embedding Embedding is the common operation that ofGRUisorderedbehaviorsbytheiroccurtime.GRUover-
+comesthevanishinggradientsproblemofRNNandisfaster
+transforms the large scale sparse feature into low-
+than LSTM (Hochreiter and Schmidhuber 1997), which is
+dimensional dense feature. In the embedding layer, each
+suitable for e-commerce system. The formulations of GRU
+field of feature is corresponding to one embedding ma-
+arelistedasfollows:
+trix, e.g., the embedding matrix of visited goods can
+be represented by E goods = [m 1;m 2;··· ;m K] ∈ u t =σ(Wui t+Uuh t−1+bu), (2)
+RnE×K,wherem j ∈ RnE representsaembeddingvec- r t =σ(Wri t+Urh t−1+br), (3)
+tor with dimension n . Especially, for behavior feature
+E h˜ =tanh(Whi +r ◦Uhh +bh), (4)
+b , if b [j ] = 1, then its corresponding embedding t t t t−1
+t t t
+vector is m jt, and the ordered embedding vector list h t =(1−u t)◦h t−1+u t◦h˜ t, (5)
+of behaviors for one user can be represented by e =
+b where σ is the sigmoid activation function, ◦ is element-
+[m j1;m j2;··· ,m jT]. Similarly, e a represents the con- wise product, Wu,Wr,Wh ∈ RnH×nI, Uz,Ur,Uh ∈
+catenated embedding vectors of fields in the category of
+n ×n , n is the hidden size, and n is the input size.
+advertisement. H H H I
+i istheinputofGRU,i = e [t]representsthet-thbehav-
+t t b
+• MultilayerPerceptron(MLP)First,theembeddingvec- iorthattheusertaken,h isthet-thhiddenstates.
+t
+tors from one category are fed into pooling operation. However,thehiddenstateh whichonlycapturesthede-
+t
+Then all these pooling vectors from different categories pendency between behaviors can not represent interest ef-
+are concatenated. At last, the concatenated vector is fed fectively. As the click behavior of target item is triggered
+intothefollowingMLPforfinalprediction. byfinalinterest,thelabelusedinL target onlycontainsthe
+groundtruththatsupervisesfinalinterest’sprediction,while
+LossFunction ThewidelyusedlossfunctionindeepCTR history state h (t < T) can’t obtain proper supervision.
+t
+models is negative log-likelihood function, which uses the As we all know, interest state at each step leads to consec-
+labeloftargetitemtosuperviseoverallprediction: utivebehaviordirectly.Soweproposeauxiliaryloss,which
+usesbehaviorb tosupervisethelearningofintereststate
+N t+1
+1 (cid:88) h .Besidesusingtherealnextbehavioraspositiveinstance,
+L =− (ylogp(x)+(1−y)log(1−p(x))), (1) t
+target N wealsousenegativeinstancethatsamplesfromitemsetex-
+(x,y)∈D cept the clicked item. There are N pairs of behavior em-
+where x = [x p,x a,x c,x b] ∈ D, D is the training set of bedding sequence: {ei b,eˆi b} ∈ D B,i ∈ 1,2,··· ,N, where
+sizeN.y ∈ {0,1}representswhethertheuserclickstarget ei ∈ RT×nE representstheclickedbehaviorsequence,and
+b
+
+Figure1:ThestructureofDIEN.Atthebehaviorlayer,behaviorsaresortedbytime,theembeddinglayertransformstheone-
+hotrepresentationb[t]toembeddingvectore[t].Theninterestextractorlayerextractseachintereststateh[t]withthehelpof
+auxiliaryloss.Atinterestevolvinglayer,AUGRUmodelstheinterestevolvingprocessthatisrelativetotargetitem.Thefinal
+intereststateh(cid:48)[T]andembeddingvectorsofremainingfeatureareconcatenated,andfedintoMLRforfinalCTRprediction.
+eˆi ∈ RT×nE represent the negative sample sequence. T is Interest Evolving Layer As the joint influence from ex-
+b
+thenumberofhistorybehaviors,n E isthedimensionofem- ternal environment and internal cognition, different kinds
+bedding,ei[t]∈Grepresentsthet-thitem’sembeddingvec- of user interests are evolving over time. Using the interest
+b
+torthatusericlick,Gisthewholeitemset.eˆi[t]∈G−ei[t] on clothes as an example, with the changing of population
+b b
+representstheembeddingofitemthatsamplesfromtheitem trend and user taste, user’s preference for clothes evolves.
+set except the item clicked by user i at t-th step. Auxiliary Theevolvingprocessoftheuserinterestonclotheswilldi-
+losscanbeformulatedas: rectlydecidesCTRpredictionforcandidateclothes.Thead-
+L =− 1 ((cid:88)N (cid:88) logσ(hi,ei[t+1]) (6) vantagesofmodelingtheevolvingprocessisasfollows:
+aux N t b • Interestevolvingmodulecouldsupplytherepresentation
+i=1 t
+offinalinterestwithmorerelativehistoryinformation;
++log(1−σ(hi,eˆi[t+1]))),
+t b
+• ItisbettertopredicttheCTRoftargetitembyfollowing
+where σ(x ,x ) = 1 is sigmoid activation
+1 2 1+exp(−[x1,x2]) theinterestevolutiontrend.
+function,hi representsthet-thhiddenstateofGRUforuser
+t Notably,interestshowstwocharacteristicsduringevolving:
+i.ThegloballossweuseinourCTRmodelis:
+• Asthediversityofinterests,interestcandrift.Theeffect
+L=L +α∗L , (7)
+target aux ofinterestdriftingonbehaviorsisthatusermayinterestin
+whereαisthehyper-parameterwhichbalancestheinterest
+kindsofbooksduringaperiodoftime,andneedclothes
+representationandCTRprediction.
+inanothertime.
+With the help of auxiliary loss, each hidden state h
+t
+• Thoughinterestsmayaffecteachother,eachinteresthas
+is expressive enough to represent interest state after user
+its own evolving process, e.g. the evolving process of
+takes behavior i . The concat of all T interest points
+t
+books and clothes is almost individually. We only con-
+[h ,h ,··· ,h ]composestheinterestsequencethatinter-
+1 2 T
+cernstheevolvingprocessthatisrelativetotargetitem.
+estevolvinglayercanmodelinterestevolvingon.
+Overall,theintroductionofauxiliarylosshasseveralad- Inthefirststage,withthehelpofauxiliaryloss,wehasob-
+vantages: from the aspect of interest learning, the intro- tainedexpressiverepresentationofinterestsequence.Byan-
+duction of auxiliary loss helps each hidden state of GRU alyzingthecharacteristicsofinterestevolving,wecombine
+represent interest expressively. As for the optimization of the local activation ability of attention mechanism and se-
+GRU, auxiliary loss reduces the difficulty of back propa- quentiallearningabilityfromGRUtomodelinterestevolv-
+gation when GRU models long history behavior sequence. ing. The local activation during each step of GRU can in-
+Lastbutnottheleast,auxiliarylossgivesmoresemanticin- tensifyrelativeinterest’seffect,andweakenthedisturbance
+formationforthelearningofembeddinglayer,whichleads frominterestdrifting,whichishelpfulformodelinginterest
+toabetterembeddingmatrix. evolvingprocessthatrelativetotargetitem.
+
+SimilartotheformulationsshowninEq.(2-5),weusei(cid:48), Table1:Thestatisticsofdatasets
+t
+h(cid:48) torepresenttheinputandhiddenstateininterestevolving
+t
+module,wheretheinputofsecondGRUisthecorrespond-
+Dataset User Goods Categories Samples
+ing interest state at Interest Extractor Layer: i(cid:48) = h . The
+t t Books 603,668 367,982 1,600 603,668
+lasthiddenstateh(cid:48) representsfinalintereststate.
+T Electronics 192,403 63,001 801 192,403
+And the attention function we used in interest evolving Industrialdataset 0.8billion 0.82billion 18,006 7.0billion
+modulecanbeformulatedas:
+exp(h We )
+a = t a , (8)
+t (cid:80)T exp(h We ) differenceofimportanceamongdifferentdimensions.We
+j=1 j a proposetheGRUwithattentionalupdategate(AUGRU)
+wheree istheconcatofembeddingvectorsfromfieldsin tocombineattentionmechanismandGRUseamlessly:
+a
+c sta at te eg ao nry da nd A,W isth∈ eR din mH e× nn siA o, nn oH fai ds vt eh re tid seim me en ns ti ’o sn emof beh did dd ine gn u˜(cid:48)
+t
+=a t∗u(cid:48) t, (11)
+vector. Attention score can reflect the relationship between h(cid:48) =(1−u˜(cid:48))◦h(cid:48) +u˜(cid:48) ◦h˜(cid:48), (12)
+t t t−1 t t
+advertisemente andinputh ,andstrongrelativenessleads
+a t
+toalargeattentionscore. whereu(cid:48) istheoriginalupdategateofAUGRU,u˜(cid:48) isthe
+t t
+Next,wewillintroduceseveralapproachesthatcombine attentionalupdategatewedesignforAUGRU,h(cid:48),h(cid:48) ,
+t t−1
+the mechanism of attention and GRU to model the process andh˜(cid:48) arethehiddenstatesofAUGRU.
+t
+ofinterestevolution.
+InAUGRU,wekeeporiginaldimensionalinformationof
+• GRU with attentional input (AIGRU) In order to acti- updategate,whichdecidestheimportanceofeachdimen-
+vate relative interests during interest evolution, we pro- sion. Based on the differentiated information, we use at-
+pose a naive method, named GRU with attentional in- tention score a to scale all dimensions of update gate,
+t
+put (AIGRU). AIGRU uses attention score to affect the
+which results that less related interest make less effects
+inputofinterestevolvinglayer.AsshowninEq.(9):
+onthehiddenstate.AUGRUavoidsthedisturbancefrom
+i(cid:48) =h ∗a (9) interest drifting more effectively, and pushes the relative
+t t t
+interesttoevolvesmoothly.
+Whereh isthet-thhiddenstateofGRUatinterestex-
+t
+tractor layer, i(cid:48) is the input of the second GRU which is
+t Experiments
+forinterestevolving,and∗meansscalar-vectorproduct.
+InAIGRU,thescaleoflessrelatedinterestcanbereduced Inthissection,wecompareDIENwiththestateofthearton
+by the attention score. Ideally, the input value of less re- both public and industrial datasets. Besides, we design ex-
+lated interest can be reduced to zero. However, AIGRU perimentstoverifytheeffectofauxiliarylossandAUGRU,
+works not very well. Because even zero input can also respectively.Forobservingtheprocessofinterestevolving,
+changethehiddenstateofGRU,sothelessrelativeinter- weshowthevisualizationresultofinteresthiddenstates.At
+estsalsoaffectthelearningofinterestevolving. last,wesharetheresultsandtechniquesforonlineserving.
+• Attention based GRU(AGRU) In the area of question
+answering (Xiong, Merity, and Socher 2016), attention Datasets
+basedGRU(AGRU)isfirstlyproposed.Aftermodifying
+Weusebothpublicandindustrialdatasetstoverifytheeffect
+theGRUarchitecturebyembeddinginformationfromthe
+ofDIEN.ThestatisticsofalldatasetsareshowninTable1.
+attentionmechanism,AGRUcanextractkeyinformation
+in complex queries effectively. Inspired by the question
+publicDataset AmazonDataset(McAuleyetal.2015)is
+answering system, we transfer the using of AGRU from
+composed of product reviews and metadata from Amazon.
+extractingkeyinformationinquerytocapturerelativein-
+We use two subsets of Amazon dataset: Books and Elec-
+terest during interest evolving novelly. In detail, AGRU
+usestheattentionscoretoreplacetheupdategateofGRU, tronics, to verify the effect of DIEN. In these datasets, we
+andchangesthehiddenstatedirectly.Formally: regard reviews as behaviors, and sort the reviews from one
+userbytime.AssumingthereareT behaviorsofuseru,our
+h(cid:48) t =(1−a t)∗h(cid:48) t−1+a t∗h˜(cid:48) t, (10) purposeistousetheT−1behaviorstopredictwhetheruser
+uwillwritereviewsthatshowninT-threview.
+whereh(cid:48),h(cid:48) andh˜(cid:48) arethehiddenstateofAGRU.
+t t−1 t
+Inthesceneofinterestevolving,AGRUmakesuseofthe IndustrialDataset Industrialdatasetisconstructedbyim-
+attention score to control the update of hidden state di- pression and click logs from our online display advertising
+rectly.AGRUweakenstheeffectfromlessrelatedinterest system.Fortrainingset,wetaketheadsthatclickedatlast
+duringinterestevolving.Theembeddingofattentioninto 49 days as the target item. Each target item and its corre-
+GRUimprovestheinfluenceofattentionmechanism,and spondingclickbehaviorsconstructoneinstance.Usingone
+helpsAGRUovercomethedefectsofAIGRU. targetitemaasexample,wesetthedaythataisclickedas
+• GRUwithattentionalupdategate(AUGRU)Although
+thelastday,thebehaviorsthatthisusertakesinprevious14
+AGRUcanuseattentionscoretocontroltheupdateofhid- days as history behaviors. Similarly, the target item in test
+denstatedirectly,itusesascalar(theattentionscorea ) setischoosefromthefollowingoneday,andthebehaviors
+t
+toreplaceavector(theupdategateu ),whichignoresthe arebuiltassameastrainingdata.
+t
+
+Table2:Results(AUC)onpublicdatasets Table3:Results(AUC)onindustrialdataset
+Model Electronics(mean±std) Books(mean±std) Model AUC
+BaseModel(Zhouetal.2018c) 0.7435±0.00128 0.7686±0.00253 BaseModel(Zhouetal.2018c) 0.6350
+Wide&Deep(Chengetal.2016) 0.7456±0.00127 0.7735±0.00051 Wide&Deep(Chengetal.2016) 0.6362
+PNN(Quetal.2016) 0.7543±0.00101 0.7799±0.00181 PNN(Quetal.2016) 0.6353
+DIN(Zhouetal.2018c) 0.7603±0.00028 0.7880±0.00216
+DIN(Zhouetal.2018c) 0.6428
+TwolayerGRUAttention 0.7605±0.00059 0.7890±0.00268
+DIEN 0.7792±0.00243 0.8453±0.00476 TwolayerGRUAttention 0.6457
+BaseModel+GRU+AUGRU 0.6493
+DIEN 0.6541
+ComparedMethods
+We compare DIEN with some mainstream CTR prediction ApplicationStudy
+methods:
+Inthissection,wewillshowtheeffectofAUGRUandaux-
+• BaseModelBaseModeltakesthesamesettingofembed- iliaryloss,respectively.
+dingandMLRwithDIEN,andusessumpoolingopera-
+tiontointegratebehaviorembeddings.
+Table4:EffectofAUGRUandauxiliaryloss(AUC)
+• Wide&Deep(Chengetal.2016)Wide&Deepconsistsof
+twoparts:itsdeepmodelisthesameasBaseModel,and
+itswidemodelisalinearmodel. Model Electronics(mean±std) Books(mean±std)
+BaseModel 0.7435±0.00128 0.7686±0.00253
+• PNN(Quetal.2016)PNNusesaproductlayertocapture TwolayerGRUattention 0.7605±0.00059 0.7890±0.00268
+interactivepatternsbetweeninterfieldcategories. BaseModel+GRU+AIGRU 0.7606±0.00061 0.7892±0.00222
+BaseModel+GRU+AGRU 0.7628±0.00015 0.7890±0.00268
+• DIN (Zhou et al. 2018c) DIN uses the mechanism of at- BaseModel+GRU+AUGRU 0.7640±0.00073 0.7911±0.00150
+DIEN 0.7792±0.00243 0.8453±0.00476
+tentiontoactivaterelateduserbehaviors.
+• TwolayerGRUAttentionSimilarto(Parsanaetal.2018),
+Effect of GRU with attentional update gate (AUGRU)
+weusetwolayerGRUtomodelsequentialbehaviors,and
+Table 4 shows the results of different methods for interest
+takesanattentionlayertoactiverelativebehaviors. evolving.ComparedtoBaseMode,TwolayerGRUAttention
+obtainsimprovement,whilethelackformodelingevolution
+ResultsonPublicDatasets
+limitsitsability.AIGRUtakesthebasicideatomodelevolv-
+Overall, as shown in Fig. 1, the structure of DIEN consists ing process, though it has advances, the splitting of atten-
+GRU,AUGRUandauxiliarylossandothernormalcompo- tionandevolvinglostinformationduringinterestevolving.
+nents.Inpublicdatase.Eachexperimentisrepeated5times. AGRU further tries to fuse attention and evolution, as we
+From Table 2, we can find Wide & Deep with manually proposed previously, its attention in GRU can’t make fully
+designedfeaturesperformsnotwell,whileautomativeinter- usetheresourceofupdategate.AUGRUobtainsobviousim-
+actionbetweenfeatures(PNN)canimprovetheperformance provements,whichreflectsitfusestheattentionmechanism
+ofBaseModel.Atthesametime,themodelsaimingtocap- and sequential learning ideally, and captures the evolving
+ture interests can improve AUC obviously: DIN actives the processofrelativeinterestseffectively.
+intereststhatrelativetoad,TwolayerGRUattentionfurther
+Effectofauxiliaryloss Basedonthemodelthatobtained
+activatesrelevantinterestsininterestsequence,alltheseex-
+withAUGRU,wefurtherexploretheeffectofauxiliaryloss.
+plorationsobtainpositivefeedback.DIENnotonlycaptures
+Inthepublicdatasets,thenegativeinstanceusedintheaux-
+sequentialinterestsmoreeffectively,butalsomodelsthein-
+iliarylossisrandomlysampledfromitemsetexcepttheitem
+terest evolving process that is relative to target item. The
+shownincorrespondingreview.Asforindustrialdataset,the
+modelingforinterestevolvinghelpsDIENobtainbetterin-
+adsshownwhilenotbeenclickedareasnegativeinstances.
+terest representation, and capture dynamic of interests pre-
+AsshowninFig.2,thelossofbothwholelossLandaux-
+cisely,whichimprovestheperformancelargely.
+ResultsonIndustrialDataset
+2.25
+We further conduct experiments on the dataset of real dis- 2.00 play advertisement. There are 6 FCN layers used in indus- 1.75
+trialdataset,thedimensionsarea600,400,300,200,80,2, 1.50
+respectively,themaxlengthofhistorybehaviorsissetas50. 1.25
+1.00 AsshowninTable3,Wide&DeepandPNNobtainbet-
+0.75
+ter performance than BaseModel. Different from only one
+0 50 100 150 200 250
+category of goods in Amazon dataset, the dataset of on- Iter
+line advertisement contains all kinds of goods at the same
+time. Based on this characteristic, attention-based methods
+improve the performance largely, like DIN. DIEN captures
+the interest evolving process that is relative to target item,
+andobtainsbestperformance.
+ssoL
+Whole training loss 1.6
+Training auxiliary loss 1.5 Whole evaluating loss 1.4
+Evaluating auxiliary loss 1.3
+1.2
+1.1
+1.0
+0.9
+0 10 20 30 40 50 60 70 80
+Iter
+(a)Books
+ssoL
+Whole training loss
+Training auxiliary loss Whole evaluating loss Evaluating auxiliary loss
+(b)Electronics
+Figure2:Learningcurvesonpublicdatasets.αissetas1.
+iliarylossL auxkeepsimilardescendtrend,whichmeans
+
+Table5:ResultsfromOnlineA/Btesting
+Model CTRGain PPCGain eCPMGain
+BaseModel 0% 0% 0%
+DIN(Zhouetal.2018c) +8.9% -2.0% +6.7%
+DIEN +20.7% -3.0% +17.1%
+both global loss for CTR prediction and auxiliary loss for
+interestrepresentationmakeeffect.
+AsshowninTable4,auxiliarylossbringgreatimprove- (a)VisualizationofhiddenstatesinAUGRU
+mentsforbothpublicdatasets,itreflectstheimportanceof
+supervision information for the learning of sequential in-
+terestsandembeddingrepresentation.Forindustrialdataset
+showninTable3,modelwithauxiliarylossimprovesperfor-
+mancefurther.However,wecanseethattheimprovementis
+not as obvious as that in public dataset. The difference de-
+rivesfromseveralaspects.First,forindustrialdataset,ithas
+a large number of instances to learn the embedding layer,
+which makes it earn less from auxiliary loss. Second, dif-
+ferent from all items from one category in amazon dataset,
+thebehaviorsinindustrialdatasetareclickedgoodsfromall
+(b)Attentionscoreofdifferenthistorybehaviors
+scenesandallcatagoriesinourplatform.Ourgoalistopre-
+dict CTR for ad in one scene. The supervision information Figure3:Visualizationofinterestevolution,(a)Thehidden
+from auxiliary loss may be heterogeneous from the target statesofAUGRUreducedbyPCAintotwodimensions.Dif-
+item,sotheeffectofauxiliarylossfortheindustrialdataset ferentcurvesshowsthesamehistorybehaviorsareactivated
+maybelessforpublicdatasets,whiletheeffectofAUGRU bydifferenttargetitems.Nonemeansinterestevolvingisnot
+ismagnified. effectedbytargetitem.(b)Facedwithdifferenttargetitem,
+attentionscoresofallhistorybehaviorsareshown.
+VisualizationofInterestEvolution
+The dynamic of hidden states in AUGRU can reflect the
+evolving process of interest. In this section, we visualize
+these hidden states to explore the effect of different target
+itemforinterestevolution. mille(eCPM)by17.1%.Besides,DIENhasdecayedpayper
+The selective history behaviors are from category Com- click(PPC)by3.0%.Now,DIENhasbeendeployedonline
+puter Speakers, Headphones, Vehicle GPS, SD & SDHC and serves the main traffic, which contributes a significant
+Cards, Micro SD Cards, External Hard Drives, Head- businessrevenuegrowth.
+phones, Cases, successively. The hidden states in AUGRU
+areprojectedintoatwodimensionspacebyprincipalcom- ItisworthnoticingthatonlineservingofDIENisagreat
+ponentanalysis(PCA)(Wold,Esbensen,andGeladi1987). challenge for commercial system. Online system holds re-
+Theprojectedhiddenstatesarelinkedinorder.Themoving ally high traffic in our display advertising system, which
+routesofhiddenstatesactivatedbydifferenttargetitemare servesmorethan1millionuserspersecondattrafficpeak.
+showninFig.3(a).TheyellowcurvewhichiswithNonetar- In order to keep low latency and high throughput, we de-
+getrepresentstheattentionscoreusedineq.(12)areequal, ploy several important techniques to improve serving per-
+that is the evolution of interest are not effected by target formance:i)elementparallelGRU&kernelfusion(Wang,
+item.Thebluecurveshowsthehiddenstatesareactivatedby Lin, and Yi 2010), we fuse as many independent kernels
+itemfromcategoryScreenProtectors,whichislessrelated as possible. Besides, each element of the hidden state of
+to all history behaviors, so it shows similar route to yellow GRU can be calculated in parallel. ii) Batching: adjacent
+curve. The red curve shows the hidden states are activated requests from different users are merged into one batch to
+by item from category Cases, the target item is strong re- takeadvantageofGPU.iii)ModelcompressingwithRocket
+latedtothelastbehavior,whichmovesalongstepshownin Launching(Zhouetal.2018b):weusethemethodproposed
+Fig.3(a).Correspondingly,thelastbehaviorobtainsalarge in (Zhou et al. 2018b) to train a light network, which has
+attentionscoreshowedinFig.3(b). smallersizebutperformsclosetothedeeperandmorecom-
+plex one. For instance, the dimension of GRU hidden state
+OnlineServing&A/Btesting
+canbecompressedfrom108to32withthehelpofRocket
+From 2018-06-07 to 2018-07-12, online A/B testing was Launching. With the help of these techniques, latency of
+conducted in the display advertising system of Taobao. DIEN serving can be reduced from 38.2 ms to 6.6 ms and
+As shown in Table 5, compared to the BaseModel, DIEN theQPS(QueryPerSecond)capacityofeachworkercanbe
+has improved CTR by 20.7% and effective cost per improvedto360.
+
+Conclusion [Parsanaetal.2018] Parsana, M.; Poola, K.; Wang, Y.; and
+In this paper, we propose a new structure of deep net- Wang, Z. 2018. Improving native ads ctr prediction by
+work,namelyDeepInterestEvolutionNetwork(DIEN),to largescaleeventembeddingandrecurrentnetworks. arXiv
+modelinterestevolvingprocess.DIENimprovestheperfor- preprintarXiv:1804.09133.
+mance of CTR prediction largely in online advertising sys- [Quetal.2016] Qu,Y.;Cai,H.;Ren,K.;Zhang,W.;Yu,Y.;
+tem. Specifically, we design interest extractor layer to cap- Wen,Y.;andWang,J. 2016. Product-basedneuralnetworks
+tureinterestsequenceparticularly,whichusesauxiliaryloss foruserresponseprediction. InProceedingsofthe16thIn-
+to provide the interest state with more supervision. Then ternationalConferenceonDataMining,1149–1154. IEEE.
+weproposeinterestevolvinglayer,whereDIENusesGRU
+[Renetal.2018] Ren, K.; Fang, Y.; Zhang, W.; Liu, S.; Li,
+withattentionalupdategate(AUGRU)tomodeltheinterest
+J.; Zhang, Y.; Yu, Y.; and Wang, J. 2018. Learning multi-
+evolvingprocessthatisrelativetotargetitem.Withthehelp
+touchconversionattributionwithdual-attentionmechanisms
+ofAUGRU,DIENcanovercomethedisturbancefrominter-
+foronlineadvertising. arXivpreprintarXiv:1808.03737.
+estdrifting.Modelingforinterestevolutionhelpsuscapture
+[Rendleetal.2009] Rendle, S.; Freudenthaler, C.; Gantner,
+interesteffectively,whichfurtherimprovestheperformance
+Z.; and Schmidt-Thieme, L. 2009. Bpr: Bayesian person-
+ofCTRprediction.Infuture,wewilltrytoconstructamore
+alized ranking from implicit feedback. In Proceedings of
+personalizedinterestmodelforCTRprediction.
+thetwenty-fifthconferenceonuncertaintyinartificialintel-
+ligence,452–461. AUAIPress.
+References
+[Rendle2010] Rendle,S. 2010. Factorizationmachines. In
+[Chengetal.2016] Cheng, H.-T.; Koc, L.; Harmsen, J.;
+Proceedings of the 10th International Conference on Data
+Shaked, T.; Chandra, T.; Aradhye, H.; Anderson, G.; Cor-
+Mining,995–1000. IEEE.
+rado, G.; Chai, W.; Ispir, M.; et al. 2016. Wide & deep
+learning for recommender systems. In Proceedings of the [Song,Elkahky,andHe2016] Song,Y.;Elkahky,A.M.;and
+1stWorkshoponDeepLearningforRecommenderSystems, He,X. 2016. Multi-ratedeeplearningfortemporalrecom-
+7–10. ACM. mendation. In Proceedings of the 39th International ACM
+SIGIR conference on Research and Development in Infor-
+[Chungetal.2014] Chung, J.; Gulcehre, C.; Cho, K.; and
+mationRetrieval,909–912. ACM.
+Bengio, Y. 2014. Empirical evaluation of gated recur-
+rentneuralnetworksonsequencemodeling. arXivpreprint [Wang,Lin,andYi2010] Wang, G.; Lin, Y.; and Yi, W.
+arXiv:1412.3555. 2010. Kernel fusion: An effective method for better power
+efficiency on multithreaded gpu. In Proceedings of the
+[Friedman2001] Friedman,J.H. 2001. Greedyfunctionap-
+2010IEEE/ACMInt’LConferenceonGreenComputingand
+proximation:agradientboostingmachine. Annalsofstatis-
+Communications & Int’L Conference on Cyber, Physical
+tics1189–1232.
+andSocialComputing,344–350.
+[Guoetal.2017] Guo, H.; Tang, R.; Ye, Y.; Li, Z.; and He,
+X. 2017. Deepfm: a factorization-machine based neural [Wold,Esbensen,andGeladi1987] Wold, S.; Esbensen, K.;
+networkforctrprediction. InProceedingsofthe26thInter- andGeladi,P. 1987. Principalcomponentanalysis. Chemo-
+national Joint Conference on Artificial Intelligence, 2782– metricsandintelligentlaboratorysystems2(1-3):37–52.
+2788. [Xiong,Merity,andSocher2016] Xiong,C.;Merity,S.;and
+[HeandMcAuley2016] He,R.,andMcAuley,J. 2016. Ups Socher,R. 2016. Dynamicmemorynetworksforvisualand
+anddowns:Modelingthevisualevolutionoffashiontrends textual question answering. In Proceedings of the 33rd In-
+withone-classcollaborativefiltering. InProceedingsofthe ternationalConferenceonInternationalConferenceonMa-
+25thinternationalconferenceonworldwideweb,507–517. chineLearning,2397–2406.
+[HidasiandKaratzoglou2017] Hidasi,B.,andKaratzoglou, [Yuetal.2016] Yu, F.; Liu, Q.; Wu, S.; Wang, L.; and Tan,
+A. 2017. Recurrent neural networks with top-k T. 2016. Adynamicrecurrentmodelfornextbasketrecom-
+gains for session-based recommendations. arXiv preprint mendation. In Proceedings of the 39th International ACM
+arXiv:1706.03847. SIGIR conference on Research and Development in Infor-
+mationRetrieval,729–732. ACM.
+[HochreiterandSchmidhuber1997] Hochreiter, S., and
+Schmidhuber, J. 1997. Long short-term memory. Neural [Zhangetal.2014] Zhang, Y.; Dai, H.; Xu, C.; Feng, J.;
+computation9(8):1735–1780. Wang, T.; Bian, J.; Wang, B.; and Liu, T.-Y. 2014. Se-
+quentialclickpredictionforsponsoredsearchwithrecurrent
+[Lianetal.2018] Lian, J.; Zhou, X.; Zhang, F.; Chen, Z.;
+neural networks. In Proceedings of the 28th AAAI Confer-
+Xie,X.;andSun,G.2018.xdeepfm:Combiningexplicitand
+enceonArtificialIntelligence,1369–1375.
+implicit feature interactions for recommender systems. In
+Proceedings of the 24th ACM SIGKDD International Con- [Zhouetal.2018a] Zhou,C.;Bai,J.;Song,J.;Liu,X.;Zhao,
+ferenceonKnowledgeDiscovery&DataMining. Z.;Chen,X.;andGao,J.2018a.Atrank:Anattention-based
+[McAuleyetal.2015] McAuley,J.;Targett,C.;Shi,Q.;and userbehaviormodelingframeworkforrecommendation. In
+Proceedings of the 32nd AAAI Conference on Artificial In-
+VanDenHengel,A. 2015. Image-basedrecommendations
+onstylesandsubstitutes. InProceedingsofthe38thInter- telligence.
+nationalACMSIGIRConferenceonResearchandDevelop- [Zhouetal.2018b] Zhou, G.; Fan, Y.; Cui, R.; Bian, W.;
+mentinInformationRetrieval,43–52. ACM. Zhu,X.;andGai,K. 2018b. Rocketlaunching:Auniversal
+
+and efficient framework for training well-performing light
+net. InProceedingsofthe32ndAAAIConferenceonArtifi-
+cialIntelligence.
+[Zhouetal.2018c] Zhou, G.; Zhu, X.; Song, C.; Fan, Y.;
+Zhu,H.;Ma,X.;Yan,Y.;Jin,J.;Li,H.;andGai,K. 2018c.
+Deep interest network for click-through rate prediction. In
+Proceedings of the 24th ACM SIGKDD International Con-
+ference on Knowledge Discovery & Data Mining, 1059–
+1068. ACM.

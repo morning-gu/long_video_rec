@@ -1,0 +1,1100 @@
+Counteracting Duration Bias in Video Recommendation via
+Counterfactual Watch Time
+HaiyuanZhao∗ GuohaoCai∗ JiemingZhu
+SchoolofInformation HuaweiNoah’sArkLab HuaweiNoah’sArkLab
+RenminUniversityofChina Shenzhen,China Shenzhen,China
+Beijing,China caiguohao1@huawei.com jiemingzhu@ieee.org
+haiyuanzhao@ruc.edu.cn
+ZhenhuaDong JunXu† Ji-RongWen
+HuaweiNoah’sArkLab GaolingSchoolofArtificialIntelligence GaolingSchoolofArtificialIntelligence
+Shenzhen,China RenminUniversityofChina RenminUniversityofChina
+dongzhenhua@huawei.com Beijing,China Beijing,China
+junxu@ruc.edu.cn jrwen@ruc.edu.cn
+ABSTRACT CCSCONCEPTS
+Invideorecommendation,anongoingeffortistosatisfyusers’per- •Informationsystems→Recommendersystems.
+sonalizedinformationneedsbyleveragingtheirloggedwatchtime.
+However,watchtimepredictionsuffersfromdurationbias,hinder- KEYWORDS
+ingitsabilitytoreflectusers’interestsaccurately.Existinglabel-
+videorecommendation,durationbias,usermodelling
+correctionapproachesattempttouncoveruserintereststhrough
+groupingandnormalizingobservedwatchtimeaccordingtovideo ACMReferenceFormat:
+duration.Althougheffectivetosomeextent,wefoundthatthese HaiyuanZhao,GuohaoCai,JiemingZhu,ZhenhuaDong,JunXu,andJi-
+approachesregardcompletelyplayedrecords(i.e.,auserwatches RongWen.2024.CounteractingDurationBiasinVideoRecommendation
+theentirevideo)asequallyhighinterest,whichdeviatesfromwhat
+viaCounterfactualWatchTime.InProceedingsofthe30thACMSIGKDD
+ConferenceonKnowledgeDiscoveryandDataMining(KDD’24),August
+weobservedonrealdatasets:usershavevariedexplicitfeedback
+25–29,2024,Barcelona,Spain.ACM,NewYork,NY,USA,12pages.https:
+proportionwhencompletelyplayingvideos.Inthispaper,wein- //doi.org/10.1145/3637528.3671817
+troducethecounterfactualwatchtime(CWT),thepotentialwatch
+timeauserwouldspendonthevideoifitsdurationissufficiently
+long.Analysisshowsthatthedurationbiasiscausedbythetrun- 1 INTRODUCTION
+cationofCWTduetothevideodurationlimitation,whichusually Therisingofvideocontentplatformshaveattractedbillionsof
+occursonthosecompletelyplayedrecords.Besides,aCounterfac- usersandbecomemorefrequentinthedailyuseofusersnowa-
+tualWatchModel(CWM)isproposed,revealingthatCWTequals days[12,15,24,25].Tosatisfyusers’informationneedsanden-
+thetimeusersgetthemaximumbenefitfromvideorecommender hance their engagement, developing accurate and personalized
+systems.Moreover,acost-basedtransformfunctionisdefinedto videorecommendersystemsiscritical.Itisessentialtoincorpo-
+transformtheCWTintotheestimationofuserinterest,andthe ratevariousfeedbacksignalsthatreflectusers’intereststoachieve
+modelcanbelearnedbyoptimizingacounterfactuallikelihood thisgoal.Inthevideoscenario,watchtimehasbeencommonly
+functiondefinedoverobserveduserwatchtimes.Extensiveexper- employedasanindicatorofuserinterestandcanbeleveragedto
+imentsonthreerealvideorecommendationdatasetsandonline enhancetheaccuracyofvideorecommendersystems[5,12].
+A/BtestingdemonstratedthatCWMeffectivelyenhancedvideo Likeotherimplicitfeedbacksignals(e.g.,userclick)inrecom-
+recommendationaccuracyandcounteractedthedurationbias. mendersystems,directlyinferringtheuserinterestlabelsfrom
+thewatchtimeisalsohurtbythebiasproblem.Onecrucialbiasis
+durationbias;thatis,users’watchtimeisnotonlyrelatedtotheirin-
+∗Bothauthorscontributedequallytothisresearch.
+†JunXuisthecorrespondingauthor.WorkpartiallydoneatEngineeringResearchCen- terestbutalsoaffectedbytheduration(length)ofthevideo[49,53].
+terofNext-GenerationIntelligentSearchandRecommendation,MinistryofEducation. Ithasbeenobservedthatusersnaturallytendtowatchformore
+time on longer videos, making watch time no longer a faithful
+reflectionoftheuser’sinterest.
+Permissiontomakedigitalorhardcopiesofallorpartofthisworkforpersonalor
+ExistingapproacheslikePlayCompletionRate(PCR),Watch
+classroomuseisgrantedwithoutfeeprovidedthatcopiesarenotmadeordistributed
+forprofitorcommercialadvantageandthatcopiesbearthisnoticeandthefullcitation TimeGain(WTG)[49]andQuantile-basedmethod(D2Q)[53]re-
+onthefirstpage.Copyrightsforcomponentsofthisworkownedbyothersthanthe garddurationbiasasaproblemofinconsistentwatchtimescales
+author(s)mustbehonored.Abstractingwithcreditispermitted.Tocopyotherwise,or
+causedbythevideoduration.Thelongerthevideoduration,the
+republish,topostonserversortoredistributetolists,requirespriorspecificpermission
+and/orafee.Requestpermissionsfrompermissions@acm.org. largerthewatchtimescale,resultinginalongeraveragewatch
+KDD’24,August25–29,2024,Barcelona,Spain time.Therefore,thesemethodsgroupandnormalizethewatch
+©2024Copyrightheldbytheowner/author(s).PublicationrightslicensedtoACM.
+timeaccordingtothevideoduration,whichkeepsthewatchtime
+ACMISBN979-8-4007-0490-1/24/08...$15.00
+https://doi.org/10.1145/3637528.3671817 correspondingtodifferentvideodurationconsistentinscale.For
+4202
+nuJ
+31
+]RI.sc[
+2v23970.6042:viXra
+
+KDD’24,August25–29,2024,Barcelona,Spain HaiyuanZhaoetal.
+3.50
+3.25 3.00
+2.75
+2.50
+2.25
+2.00
+1.75
+1.500 50 100 150 200 250
+Duration(s)
+)1e1
+×(
+noitroporP
+1e1 4.4
+4.2
+4.0
+3.8
+3.6
+3.4
+3.2
+3.0 10 20 30 40 50 60
+Duration(s)
+(a)KuaiRand
+)2e1
+×(
+noitroporP
+showstheproportionofexplicitpositivefeedback(i.e.,likeandfor-
+1e2
+ward)receivedbythosecompletelyplayedrecords,groupedby
+thevideoduration.Inexistingmethods[49,53],sincetheuserhas
+fullywatchedthevideo,thesecompletelyplayedrecordsshould
+beconsideredasindicatingequallyhighinterest.However,Fig.1
+clearlyshowsthat,onbothtwodatasets,longercompletelyplayed
+videoshaveahigherproportionofpositivefeedback,eventhough
+(b)WeChat
+theshortvideosarealsocompletelyplayed.
+TheresultsinFig.1suggestthatevenifusershavewatchedthe
+Figure1:Users’explicitfeedbackproportionincompletely
+entirevideo,thesecompletelyplayedrecordsmayreflectvarying
+playedrecordsgroupedbyvideodurationof(a)KuaiRand
+levelsofinterest.Moreover,theshorterthevideoduration,the
+dataset(b)WeChatdataset.
+lowertheuserinterestlevelthatacompletelyplayedrecordcan
+represent,asitcorrespondstoalowerexplicitfeedbackproportion.
+Thisinspiresustoderiveanovelinterpretationoftheduration
+bias:Thereexistsapotentialwatchtimethatfaithfullyreflectsuser
+Video A Video A
+interest,whichistruncatedbythevideo’sduration,therebyresulting
+inadurationbias..AsillustratedinFigure2,let’sconsidertwousers,
+AandB,engagedinwatchingthesamevideowitha30sduration.
+User A User B Bothusershavecompletelyplayedthevideo,andtheirwatchtimes
+10s 20s 30s 10s 20s 30s ···
+arerecordedas30sinthelogdata.However,afterwatchingthe
+Observed Watch Time (30s) Observed Watch Time (30s)
+samevideo,UserBexhibitsahigherlevelofinterestthanUser
+Counterfactual Watch Time (30s) Counterfactual Watch Time (>30s) A, thus appearing to be left wanting more. We then consider a
+counterfactualquestion:Howlongwilltheuserwatchifthevideo
+durationissufficientlylong? ItbecomesclearthatUserAisless
+Figure2:Comparisonbetweencounterfactualwatchtimeand likely,orevenunlikely,toextendherobservedwatchtime.The
+observedwatchtime.UsersAandBhavethesameobserved logged30swatchtimeforuserAcansufficientlyreflectherinterest.
+watchtimebutdifferentcounterfactualwatchtimes. Conversely, User B prefers exceeding her observed watch time.
+Sinceherinformationneedsarenotfullysatisfiedafterwatching
+thisvideo,thelogged30swatchtimecannotrepresentB’sinterest.
+example,PCRdirectlydividesthewatchtimeaccordingtothecor- Tothisend,wearguethatthereexistsacounterfactualwatch
+respondingvideodurationandthennormalizesthewatchtimeinto time(CWT)correspondingtouserinterest,whichispartiallyob-
+intervalsof0to1.Thesenormalizedvaluesaretreatedasestimated servedduetothetruncationbyvideoduration.Forincompletely
+labelsofuserinterestindownstreamtasks.Sincethesemethods playedrecords,theCWTequalsitsobservedwatchtime,thusre-
+mitigatingbiasviacorrectinglabels,theycanbecategorisedas flectinguserinterest.Forcompletelyplayedrecords,theCWTcould
+label-correctionmethods.Inpractice,bothvideorankingbased belongerthantheobservedwatchtimeduetothetruncationby
+onuserinterestandaccuratelypredictingwatchtimearecrucial videoduration.Theuser’strueinterestlevelcouldbehigherthan
+tasks.Theadvantageofthelabel-correctionmethodisthatitcan thatdirectlyinferredfromtheobservedwatchtime.
+notonlyprovideanunbiasedestimateoftheuserinterestscore TheCWTcanexplaintheresultsinFig.1well:variousCWT
+butalsopredictwatchtimethroughtheinversetransformation aretruncatedbyvideodurationinanentirelyplayedvideo.There-
+ofthenormalizationfunction.Incontrast,otherexistingmethods, fore,thesameobservedwatchtimemaycorrespondtovarious
+suchasthefeature-basedmethods:DCR[20]andCVRDD[36], CWTandthuscannotdistinguishuserinterestlevel.Furthermore,
+primarilyfocusontheunbiasedestimationofuserinterestscores. thecompletionofshortervideosoccursmoreeasilythanlonger
+Whilethesemethodshaveproveneffective,theystruggletosimul- ones,exacerbatingthetruncationofCWT.Thisresultsinamore
+taneously estimate both watch time and user interest scores as pronounceddurationbias,impactingtheaccuracyofinterestmea-
+effectivelyaslabel-correctionmethods. surementbasedonwatchtime.
+Althoughexistinglabel-correctionmethodshaveshowneffec- To model the CWT and estimate user interests, we propose
+tivenessinsomeextent,wearguethattherearestilllimitations.In aCounterfactualWatchModel(CWM)thatadoptsaneconomic
+existingmethods,afterthenormalization,thecompletelyplayed perspectivetomodelusers’CWT.Specifically,CWMtreatsuser
+records(i.e.,theuserwatchedthewholevideo)areusuallytreated watchingasaprocessofaccumulatingwatchingrewards,wherethe
+asthehighestuserinterest,regardlessofthevideoduration.Typi- marginalrewardsareindicativeofuserinterest,andtheinvested
+cally,recordswithexplicitfeedbackcanreflectuserengagement watchtimecorrespondstotheuserwatchingcost.Atthetimepoint
+andinteresttosomeextent.However,fromtheexplicituserfeed- whereauser’smarginalcostequalsthemarginalrewards,theuser
+backsignalsprovidedinKuaiRanddataset1andWeChatdataset2,
+attainsthemaximumcumulativebenefit,makingheractivelystop
+weobservedthatuserexplicitfeedbackinthesecompletelyplayed watching.ThistimepointcorrespondstotheaforementionedCWT.
+recordsdoesnotalignwellwithcurrentmethods.Specifically,Fig.1 Then,acost-basedtransformfunctionisderivedtotransformthe
+1https://kuairand.com/ CWTtotheestimateduserinterest.Theduration-debiasedrecom-
+2https://algo.weixin.qq.com/ mendationmodelcanbelearnedbyoptimizingacounterfactual
+
+CounteractingDurationBiasinVideoRecommendationviaCounterfactualWatchTime KDD’24,August25–29,2024,Barcelona,Spain
+likelihood function defined over observed user watch times. In forcorrectingdurationbiascannoteffectivelyexplainandeliminate
+summary,CWMattemptstomodelusers’consumptionbehavior, durationbias.
+specificallyinvideoscenarios.Similartothecommonlyusedclick ClickmodelinInformationRetrieval.Modelinguserbehav-
+model[11],ourCWMisbeneficialforbothrelevancerankingand iorsplaysavitalroleinenhancingtheperformanceofinformation
+watchtimepredictionviaeffectivelymodelinguserbehaviors. retrievalsystems.Theabilitytoaccuratelymodeluserbehaviorsal-
+Themajorcontributionsofthisworkare: lowsaretrievalsystembettertofulfillusers’informationneeds[11].
+Tothisend,manymodelshavebeenproposedtoexplainorpredict
+(1) Weprovideanovelconceptcalledcounterfactualwatchtime
+userclickbehaviorinvariouscontexts:cascademodel(CM)[14],
+(CWT)forinterpretingtheessenceofdurationbias;
+userbrowsingmodel(UBM)[16]anddynamicBayesiannetwork
+(2) WeproposeamethodnamedCWMformodelingCWT.We
+(DBN)model[7]modelusers’clickbehaviorindesktopsearch-
+furtherdevelopacost-basedtransformfunctionandcounter-
+ingwithdifferentassumption;mobileclickmodel(MCM)[27]and
+factual likelihood function for learning a duration-debiased
+F-shapeClickModel(FSCM)[17]furtherextendtheunderstand-
+recommendationmodel;
+ingofusers’clickbehaviorsonmobiledevices.Moreover,Borisov
+(3) Weconductexperimentsonthreerealvideorecommendation
+etal.[4]andChenetal.[8]developtheclickmodelintoneural
+datasetsandonlineA/Btesting.Theresultimprovementsdemon-
+networks,whichenableautomaticdependencydetection.Unlike
+stratetheeffectivenessofourCWM.
+theaboveclickmodels,theUWMproposedinthispaperfocuses
+onmodelingandexplainingusers’watchingbehaviorsinceitisa
+2 RELATEDWORK
+betterquantitativeindicatorofuserpreferencesinvideofeeds.
+VideoRecommendation.Intheevolutionfromtraditionalvideo
+recommendationtoTVshow,variousmethodshavebeendevel- 3 COUNTERFACTUALWATCHTIME
+opedtoenhancetheuserexperienceandaccuracyofrecommenda-
+Inthissection,wewillfirstdefinethevideorecommendationprob-
+tions.Parketal.[28]introducedasystemthatincorporatestime
+lemandthecounterfactualwatchtime(CWT);thenwewillprovide
+factorsanduserpreferencesusing4-dimensionaltensorfactoriza-
+supportingevidencesforourproposedCWT.Wealsopresentan
+tiontoimproverecommendationaccuracy.Choetal.[10]presented
+economicviewoftheuserwatchbehaviorbasedonthewatchcost
+arecommendationmethodthataccountsforuserfeedbackwithin
+andreward.Finally,wepointoutthecurrentmethods’limitation
+specificwatchableintervalstoenhanceusersatisfactionwithTV
+fromtheCWTviewpoint.
+showrecommendations.Qinetal.[29]proposedamodelthatiden-
+tifiesandadaptstothebehaviorofmultipleusersinteractingwith 3.1 Definitionofcounterfactualwatchtime
+aTVsystem,therebyimprovingthepersonalizationofrecommen-
+Thetaskofuserinterestandwatchtimepredictioncanbeformal-
+dations. Most research works have transferred from traditional
+izedasfollows:SupposeUandVarethesetsofusersandvideos,
+video to micro-video scenarios in the mobile internet era. Cov-
+respectively.Wecanrecorduser𝑢 ∈ U’swatchingbehavioron
+ingtonetal.[13]introducedthefunnelarchitectureofYouTube
+recommender system. They predicted the expected watch time
+video𝑣 ∈VasD𝑢,𝑣 ={x𝑢,𝑣,𝑤 𝑢,𝑣,𝑑 𝑣},wherex𝑢,𝑣 ∈R𝑘 represents
+thefeaturevectorofthesamplepairand𝑘isthefeaturedimension.
+fromtrainingsampleswithweightedlogisticregression,which
+utilizes observed watch time as the weight of positive samples’
+𝑤
+𝑢,𝑣
+∈R+denotesuser𝑢’sobservedwatchtimeonvideo𝑣(e.g.,in
+loss.Multi-taskmethods[6,26,35,52]havebeenproposedtoim-
+seconds),while𝑑
+𝑣
+∈R+isthedurationofvideo𝑣.
+Next,wewillintroduceanovelconceptcalledcounterfactual
+provemetricssuchaswatchtimeprediction,relevanceofuser-item
+pair,andnumberofvideoviewstogether.Maetal.[26]extendthe
+watchtimeCWT,whichisdenotedas𝑤 𝑢𝑐 ,𝑣.Aswehavediscussed
+before,theCWTcanbedefinedas:
+mixture-of-experts[21]architecturetomulti-gateexpertknowl-
+edgeintegration.Tangetal.[35]proposedasharedlearningstruc- Definition1(counterfactualwatchtime). Foruser𝑢and
+turetoaddresstheseesawphenomenon.Changetal.[6]proposed video𝑣,theCWT𝑤 𝑢𝑐
+,𝑣
+∈Risdefinedasthetimeuserswanttowatch
+aplug-and-playparameterandembeddingpersonalizednetwork basedontheuser’sinterest𝑟 𝑢,𝑣 ifthevideodurationissufficiently
+foramulti-domainandmulti-taskrecommendation. long.Thereisnocorrelationbetween𝑤 𝑢𝑐 ,𝑣 andvideoduration𝑑 𝑣.
+CounterfactualInformationRetrieval.Mostinformationre-
+trievalsystemsconsiderusers’implicitfeedbackasasupervision TheCWT𝑤 𝑢𝑐 ,𝑣 correspondstouserinterests.However,CWT
+signaltoinfertheirtrueinterests.However,implicitfeedbackis 𝑤 𝑢𝑐 ,𝑣doesnotalwaysequaltheobservedwatchtime𝑤 𝑢,𝑣sinceitcan
+influencednotonlybyusers’interestsbutalsobyexternalfactors. betruncatedbyvideoduration𝑑 𝑣 inpractice3.Theirrelationship
+Consequently,userinterestsignalsareoftenconcealedwithinim- isformulatedasfollows:
+p i cn oli s uc p ni it tr ef ae rte fi aod cnb ta ufc r aok lm ia nn fc od a rur me sam al ta ii onin nfeu rr en e tno ricb ees ve atr e lv c te h ed cn. hiR q nue os e le osa g[r y4c 6h t] oe ar as n ddh da rd ev e se v sed tl hr oa epw e bn d
+i-
+𝑤 𝑢,𝑣 =min(𝑤 𝑢𝑐 ,𝑣,𝑑 𝑣)⇐⇒(cid:40) 𝑤𝑤 𝑢𝑢 𝑐𝑐 ,, 𝑣𝑣 = ≥𝑤 𝑤𝑢 𝑢, ,𝑣 𝑣,
+,
+i if f𝑤 𝑤𝑢 𝑢, ,𝑣 𝑣< =𝑑 𝑑𝑣 𝑣;
+;
+(1)
+asesinherentinimplicitfeedback.Previousworkincounterfac- Eq.(1)indicatethatobservedwatchtime𝑤 𝑢,𝑣 canberegardedas
+tualIRprimarilyfocusesonmitigatingpositionbias[1,9,22,48], thetruncatedvariableofCWT𝑤 𝑢𝑐 ,𝑣.
+popularitybias[45,50,54],andselectionbias[32,33,43].How-
+ever,durationbiasbecomesacrucialconcernwhenitcomesto
+3CWTmayalsobetruncatedat0,makingitdifficulttodiscernhowmuchauser
+videorecommendation,whichhasbeendiscussedinexistingstud-
+dislikesthevideo.However,thisstudyismoreconcernedwiththevideosuserslike
+ies[20,30,36,49,53].Incontrasttoourapproach,currentmethods thanthosetheydislike.
+
+KDD’24,August25–29,2024,Barcelona,Spain HaiyuanZhaoetal.
+0.25 0.20
+0.15 0.10 0.05
+0.00 (5s,34s] (34s,64s] (64s,93s] (93s,122s (] 122s,152 (s 1] 52s,181 (s 1] 81s,211 (s] 211s,240s]
+duration bins
+noitroporp
+yalp detaepeR
+0.5 0.4
+0.3 0.2 0.1
+oitar yalp
+detaeper egarevA
+0.50 0.48 0.46
+0.44 0.42 0.40 0.38
+0.36 (5s,14s] (14s,23s] (23s,32s] (32s,41s] (41s,50s] (50s,59s]
+duration bins
+(a)KuaiRand
+noitroporp
+yalp detaepeR
+1.2
+1.0 0.8 0.6
+oitar yalp
+detaeper egarevA
+(b)WeChat
+Figure3:Therepeatedplayproportionandaveragerepeated
+playratioindifferentdurationbinsof(a)KuaiRanddataset
+(b)WeChatdataset.
+0.200
+0.175
+0.150 0.125
+0.100
+0.075
+0.050
+0.025
+0.0000 5 10 15 20 25 30
+Watch Time(s)
+noitroporP
+durtaion=30s
+0.35
+0.30 0.25
+0.20
+0.15
+0.10
+0.05
+0.000 5 10 15 20 25 30
+Watch Time(s)
+(a)KuaiRand
+noitroporP
+interestlevelinthecurrentvideo.However,thevideo’sdurationis insufficienttomeettheirneeds,whichissimilartoourdefinition
+ofCWT.SincethedefinitionofCWTnecessitatesasufficiently longvideoduration(Definition1),inthisstudy,wedonotequate repeatplayingwithCWT.InFig.3,weinvestigatetherepeated
+playinginboththeKuaiRandandWeChatdatasets.Specifically,we
+focusontwometrics:(1)repeatedplayproportion,whichrepresents
+theproportionofrepeatplayedrecordswithinthecurrentvideo
+duration,and(2)averagerepeatplayratio,whichreflectstheaverage
+extentofrepeatplayingwithinthecurrentvideoduration,defined
+as(𝑤 𝑢,𝑣−𝑑 𝑣)/𝑑 𝑣.TheresultsdepictedinFig.3indicatethatboth
+theproportionofusers’repeatplayingandthedegreeofrepeat
+playingarehigherforshortervideosanddecreaseasvideoduration
+increases.
+durtaion=30s
+3.2.2 Evidence 2: bimodal distribution. Another supporting evi-
+dence is the bimodal distribution of users’ watch time. For the
+overalldistributionofallthevideoplayingrecords,existingstud-
+ies[47,55]arguethatlogarithmicwatchtimeobeystheGaussian
+distribution.However,whenwefocusonagivenvideoduration
+(e.g., 30s), the distribution of observed watch time turns out to
+(b)WeChat
+bebimodal,asshowninFig.4.Thebimodaldistributionreveals
+thatmostusersskipovertherecommendedvideoorcompletely
+Figure 4: The bimodal distribution of watch time on (a)
+watchit,whileonlyafewusersstopwatchinginthemiddleofthe
+KuaiRanddataset(b)WeChatdataset.Thevideodurationis
+videoplaying[37,51].Thisabnormaldistributionchangeisless
+30s.
+interpretedbyexistingstudiesbutcanbewellexplainedbythe
+CWT.
+more truncation less truncation
+3.2.3 Explanationfromcounterfactualwatchtime. Withoutlossof
+generality,weassumethatCWT𝑤 𝑢𝑐 ,𝑣obeysaGaussiandistribution.
+However,aswehavementionedinEq.(1),allsampled𝑤 𝑢𝑐 ,𝑣 willbe
+0 15 30 0 15 30 truncatedbyduration𝑑 𝑣.Meanwhile,𝑤 𝑢𝑐 ,𝑣 willalsobetruncated
+Watch Time (s) Watch Time (s) to0sinceallrecordedwatchtimeshavetobenon-negative.The
+(a)Repeatedplaying truncatedsamplesareassignedto𝑑 𝑣or0,respectively.Asillustrated
+inFig.5(a),withthevideodurationincreases,CWTexperiences
+counterfactual watch time dist. observed bimodal watch time dist. lesstruncationontherightside,therebyreducingthetendencyfor
+userstoengageinrepeatplaying.Meanwhile,inFig.5(b),whenthe
+originalGaussiandistributionistruncated,itpresentsabimodal
+distribution,asweobservedinthereal-worlddataset.Hence,CWT
+0 15 30 0 30 cansuccessfullyinterprettheabovephenomenon,whichinturn
+Watch Time (s) Watch Time (s)
+supportsitsexistence.
+(b)Bimodaldistribution
+3.3 Aneconomicviewofuserwatching
+Figure5:EmployingCWTtoexplain(a)repeatedplaying(b)
+ToaddresstherelationshipbetweenCWTanduserinterest,we
+bimodaldistribution.
+modeltheuser’swatchbehaviorfromaneconomicperspective.
+ThefoundationofCWTwithinthisframeworkisbasedonthe
+3.2 Theexistenceofcounterfactualwatchtime conceptsof utilitymaximization[2]andrationalchoice[39].
+Thismeansusersdecidehowmuchtimetoallocatetowatching
+ThoughtheCWTisnotdirectlyobservablefromthedata,wecan
+videosbasedontheperceivedutility(satisfaction)derivedfromthe
+still find hints about the existence of CWT in real-world video
+contentandtheirresourceconstraints.Inaccordancewiththese
+recommendationdatasets.Next,wewilluseCWTtoexplaintwo
+economicprinciples,individualsallocateresources—inthiscase,
+phenomenapresentedinrealdatasets:(i)users’repeatedplaying
+time—tomaximizetheirutility.Utilitycanbeseenasthereward
+and(ii)thebimodaldistributionofwatchtime.
+minusthecost.Forusers,thereward forwatchingavideoisthe
+3.2.1 Evidence1:repeatedplaying. Inrealdatasets,wefoundthat informationorpleasurederivedfromthevideocontent,whichis
+usersmayengageinrepeatedplaying(forexample,byrewinding determinedbytheirinteresttothevideo.However,userscannot
+thevideoprogressbar),leadingtoactualwatchtimethatexceeds earnunlimitedrewards,astheyfaceresourceconstraints,suchas
+thevideoduration.Thisphenomenonisoftenduetousers’high limitedtime.Toillustratetheconstraint,weintroducetheconcept
+
+CounteractingDurationBiasinVideoRecommendationviaCounterfactualWatchTime KDD’24,August25–29,2024,Barcelona,Spain
+𝒙𝑢,𝑣 𝑐 𝑑𝑣
+Inference
+Maximum Benefit 𝑓𝜃 𝒙𝑢,𝑣 𝑟𝑢Ƹ,𝑣 𝑔 𝑟𝑢Ƹ,𝑣;𝑐 𝑤ෝ𝑢𝑐 ,𝑣 𝑐𝑙𝑖𝑝 𝑤ෝ𝑢,𝑣 Stage
+Marginal Reward = Marginal Cost Rec. Model Transform Function
+𝒙𝑢,𝑣 𝑓𝜃 𝒙𝑢,𝑣 𝑟𝑢Ƹ,𝑣
+Rec. Model
+(a)marginalwatchcost/reward (b)cumulativewatchcost/reward 𝑐 𝑑𝑣 ℒ𝑐 𝑟𝑢Ƹ,𝑣,𝑟𝑢′ ,𝑣 Training
+Transform Function Stage
+𝑤𝑢,𝑣 𝑔−1 𝑤𝑢,𝑣;𝑐 𝑟𝑢′ ,𝑣 L Fik ue nl cih tio oo nd
+Figure6:Theeconomicviewofuserwatching.
+Figure7:ComputationalflowoftheproposedCWM.
+ofwatchingcost,whichreferstotheoveralleffortandresources
+required to watch a video, including not just the value of time
+Theorem1(observedwatchtimeisnottheindicatorofin-
+fortheuserbutalsotheuser’smentalenergyandattention.This
+terest). For∀W ⊆R+,𝑔∈G,given𝑔:R →W,wehave(cid:154)𝑔−1:
+watchingcost highlightsthatwatchingavideorequiresusersto
+W →R,whereWisthesetofallobservedwatchtimevalues,Gis
+allocatetheirfiniteresources,whichcouldhavebeenspentonother
+thefunctionspace,Risthesetofallinterestprobabilityvalues.
+activities.
+Insummary,Weassumethattheuser’swatchingbehaviorfol- TheproofofthistheoremispresentedinourAppendixA.This
+lowstheunderlyingassumptions: theoremindicatesthatexistingmethodsfailtouncoveruserinter-
+• Diminishingmarginalreward:Whentheuserwatches estinthosecompletelyplayedrecords,especiallywhenthevideo
+avideo,theenjoymentorsatisfactionderivedpersecond durationisshort.Thefailureofcurrentmethodsmotivatesusto
+decreasesgradually,whichissupportedbythehabituation developaCWT-basedapproachtoaddressthisproblemandbetter
+phenomenoninthepsychologyfiled[38]andexistingprac- understanduserinterest.
+tice[47].Theinitialmarginalwatchrewardcorrespondsto
+userinterest. 4 OURAPPROACH
+• Constantmarginalcost:Sincethewatchingcostismainly For better modeling the CWT and estimating user interest, we
+influencedbycontextfactors,wecanmildlyassumethat proposeCounterfactualWatchModel(CWM).Fig7illustratesthe
+contextfactorsarenotsignificantlyalteredduringtheperiod flow of CWM in the inference stage and training stage. At the
+userwatchingvideo.Therefore,weconsiderthemarginal inferencestage,arecommendationmodel𝑓 𝜃(·),parameterizedwith
+watchcostasaconstant. 𝜃,estimatestheuserinterest𝑟ˆ𝑢,𝑣 basedonthefeaturevectorx𝑢,𝑣.
+• Rationalusers:Userstypicallyactrationallybymaximizing Thenatransformfunction𝑔(·),conditionedonuserwatchcost
+theircumulativeutility.Userswillstopwatchingthevideo 𝑐,convertstheinterestestimationintotheCWTprediction𝑤ˆ𝑢𝑐 ,𝑣.
+whenthemarginalwatchcostequalsthereward. Theactualwatchtimeprediction𝑤ˆ𝑢,𝑣 isobtainedbytruncatingit
+Basedonthethreeassumptionsabove,wedrawthemarginal throughthevideoduration𝑑 𝑣.
+watchcost/rewardcurvesinFig.6(a)andthecumulativewatch Atthetrainingstage,toestimatetheparameters𝜃 in𝑓 𝜃(·),we
+cost/rewardcurvesinFig.6(b).Themarginalcurvesareobtained employasetofuseractivitylogD ⊆ {D𝑢,𝑣 = {x𝑢,𝑣,𝑤 𝑢,𝑣,𝑑 𝑣} :
+asderivativesofthecumulativecurves.Thefigureshowsthatthe 𝑢 ∈U,𝑣 ∈V}.ForeachD𝑢,𝑣 ∈D,theobservedwatchtime𝑤 𝑢,𝑣
+marginalwatchrewarddecreasesmonotonicallywhilethemarginal istransformedintothesupervisionsignalofuserinterestbythe
+watchcostcurveisconstant.Whenthesetwocurvesmeet,auser’s
+inverseofthetransformfunction,i.e.,𝑟 𝑢′
+,𝑣
+=𝑔−1(𝑤 𝑢,𝑣;𝑐).Although
+marginalwatchrewardequalsthemarginalwatchcost.Atthis weuseobservedwatchtime𝑤 𝑢,𝑣 astheinputoftheinversetrans-
+point,thecumulativeutility(i.e.,cumulativerewardminuscumu- formfunctionhere,wewillapproximateittoCWTinoptimization.
+lativecost)ismaximized,asillustratedinFigure6(b).Formally,we Thenthepredicteduserinterest𝑟ˆ𝑢,𝑣 =𝑓 𝜃(x𝑢,𝑣)iscalculatedwith
+refertothistimepointasourproposedCWT.Oureconomicview currentmodelparameters.ForallD𝑢,𝑣 ∈ D,comparing𝑟 𝑢′ ,𝑣 and
+caninterpretthephenomenoninFig.1andFig.2:usersinterest 𝑟ˆ𝑢,𝑣 jointlywithduration𝑑 𝑣 derivesthelikelihoodfunctionL𝑐(·).
+levelinavideoisreflectedbythetimewhentheyreceivestheir Thus,thelearningoftherecommendationmodelcanbeperformed
+maximumcumulativeutility.Whenthevideodurationistooshort byoptimizingL𝑐(·).
+toachieveeachuser’smaximumcumulativeutilitypoint,users Next,wewillelaborateonthedesignofCWM’skeycomponents:
+witheitherhighorlowinterestwillcompletelyplayit.
+(1)thetransformfunction𝑔(·)and(2)thelikelihoodfunctionL𝑐(·).
+3.4 Limitationofexistingmethods 4.1 Cost-basedtransformfunction
+Finally,wepointoutthelimitationofcurrentmethodsfromthe AsdefinedinSection3.1,theCWT𝑤 𝑢𝑐 ,𝑣 revealsuserinterestlevel
+viewpointofCWT.Wewillprovethatusers’trueinterestcannot 𝑟 𝑢,𝑣.Toestimate𝑟 𝑢,𝑣 from𝑤 𝑢𝑐 ,𝑣,wefirstdefinethetransformfunc-
+beinferredwithonlyatransformfunctionovertheobservedwatch tionbetween𝑤 𝑢𝑐 ,𝑣 and𝑟 𝑢,𝑣.
+time,asshowninthefollowingtheorem: Basedontheeconomicviewoftheuser’swatchingprocessin
+Section3.3,wefirstformulatethecumulativewatchrewardand
+
+KDD’24,August25–29,2024,Barcelona,Spain HaiyuanZhaoetal.
+cumulativewatchcostfunctionas: andCWTvariableisnottruncated.When𝑤 𝑢𝑐 ,𝑣 ≥𝑑 𝑣,thelikelihood
+𝐹 reward=𝜔(𝑟 𝑢,𝑣)·log(𝑤 𝑢𝑐 ,𝑣+1); functionequalstheprobabilitythattheCWTvariableistruncated.
+𝐹 cost=𝑐·𝑤 𝑢𝑐 ,𝑣, AsdiscussedinTheorem1,wecannotfindatransformfunction
+forindicatinguserinterestfromobservedwatchtime.Whatwe
+wherethe𝜔(𝑟 𝑢,𝑣)istheinitialmarginalrewardthatcorresponds knowisonly𝑤 𝑢𝑐 ,𝑣 ≥𝑑 𝑣,soweincorporatethispriorinlikelihood
+touserinterestlevel𝑟 𝑢,𝑣,and𝑐istheuserwatchcostpersecond.It function,allowingthemodelstodeterminetheextenttowhich
+isevidentthatthederivativefunctionof𝐹 rewardismonotonically 𝑤 𝑢𝑐 ,𝑣 shouldexceed𝑑 𝑣.
+decreasingwhilethatof𝐹 cost isconstant,whichsatisfiestheas- MaximizingEq.(4)canreducethedurationbiascausedbythe
+sumptionsinSection3.3.Whentheirderivativevaluesareequal, truncationofCWT.Toestimatetheuserinterest,wethenequally
+wecanderiveatimepoint(i.e.,CWT)forthemaximumcumulative
+transformEq.(4)intothelikelihoodfunctionofuserinterest𝑟
+𝑢,𝑣
+benefit: viathetransformfunctioninEq.(3):
+d d𝐹 r 𝑤ew 𝑢𝑐 ,a 𝑣rd = d d𝑤𝐹 c 𝑢𝑐o ,s 𝑣t ⇒𝑤 𝑢𝑐 ,𝑣 = 𝜔(𝑟 𝑐𝑢,𝑣) −1. 𝑙= 𝑤𝑢(cid:214) ,𝑣<𝑑𝑣Pr(𝑅=𝑔−1(𝑤𝑢,𝑣;𝑐),𝑅<𝑔−1(𝑑𝑣;𝑐) |x𝑢,𝑣)
+Nowwewillformulatetheinitialmarginalrewardfunction𝜔(𝑟 𝑢,𝑣). × (cid:214) Pr(𝑅 ≥𝑔−1(𝑑𝑣;𝑐) |x𝑢,𝑣)
+Since𝑟 𝑢,𝑣 ∈ (0,1),the𝜔(𝑟 𝑢,𝑣)isexpectedtofulfillthefollowing 𝑤𝑢,𝑣=𝑑𝑣
+conditions:(i)monotonicallyincreasing.(ii)when𝑟 𝑢,𝑣 →0(i.e.,the = (cid:214) Pr(𝑅=𝑔−1(𝑤𝑢,𝑣;𝑐) |x𝑢,𝑣) (cid:214) Pr(𝑅 ≥𝑔−1(𝑑𝑣;𝑐) |x𝑢,𝑣),
+lowestinterestlevel),theinitialmarginalreward𝜔(𝑟 𝑢,𝑣) should 𝑤𝑢,𝑣<𝑑𝑣 𝑤𝑢,𝑣=𝑑𝑣
+alsotendto0.(iii)when𝑟 𝑢,𝑣 → 1(i.e.,thehighestinterestlevel), (5)
+theinitialmarginalreward𝜔(𝑟 𝑢,𝑣)shouldtendtopositiveinfinity. where𝑅denotestherandomvariableofuserinterestprobability.
+Tothisend,weformulatethat𝜔(𝑟 𝑢,𝑣)=1/(−log𝑟 𝑢,𝑣),sotheCWT Next,wewillparameterizethislikelihoodfunction.
+canbefurtherwrittenas:
+4.2.2 Parameterizeandoptimizethelikelihoodfunction. According
+𝑤 𝑢𝑐 ,𝑣 =𝑔(𝑟 𝑢,𝑣;𝑐)= −𝑐lo1 g𝑟
+𝑢,𝑣
+−1. (2) t go ut ah re anr te es eul it fin th[ e23 ra], nE dq o. m(5) vc aa rn iabbe lep 𝑅ar oa bm ee yt ser Giz ae ud sw sii at nha dit sh tre io br ue tt ii oca nl
+.
+Eq.(2)indicateshowuserinterest𝑟 𝑢,𝑣andusers’watchcost𝑐affect Forconverting𝑅intoaGaussian-distributedrandomvariable,we
+theirCWT.SinceweaimtouncoveruserinterestfromtheCWT employaninversefunctionofthestandardGaussian-distributed
+fortrainingrecommendationmodel,wecanrewriteEq.(2)toits cumulativedistributionfunction:
+inversefunction:
+𝑟 𝑢,𝑣 =𝑔−1(𝑤 𝑢𝑐 ,𝑣;𝑐)=exp(cid:18)
+−𝑐(𝑤
+𝑢𝑐1 ,𝑣+1)(cid:19) . (3) Thenwecanparameter𝑔 i′ z( e·) E= q.Φ (5− )1 in(cid:2) t𝑔 o− o1 u( r·) c(cid:3) o.
+unterfactuallikelihood
+function:
+BothEq.(2)andEq.(3)arethecost-basedtransformfunctionssince
+weintroduceanextracostparameter𝑐(asahyper-parameter)for
+L𝑐 =
+(cid:214)
+𝜙
+(cid:20)𝑔′(𝑤 𝑢,𝑣;𝑐)−𝑓 𝜃(x𝑢,𝑣)(cid:21)
+𝜎
+controllingtheconversionsensitivityfromCWTtouserinterest
+𝑤𝑢,𝑣<𝑑𝑣
+o anr dvi pc re ev de icr tsa t. hT eh ue sn erw ’se ac ca tun al lev we ar ta cg he tt ih me em
+.
+toestimateuserinterest
+×
+(cid:214) (cid:18) 1−Φ(cid:20)𝑔′(𝑑 𝑣;𝑐)−𝑓 𝜃(x𝑢,𝑣)(cid:21)(cid:19)
+,
+(6)
+𝜎
+𝑤𝑢,𝑣=𝑑𝑣
+4.2 Counterfactuallikelihoodfunction
+where𝜙(·)andΦ(·)4aretheprobabilitydensityfunctionandcu-
+Althoughwehaveproposedthecost-basedtransformfunctionto
+mulativedistributionfunctionofstandardGaussiandistribution,
+describetherelationshipbetweenCWTanduserinterest,westill respectively.𝜎 isthestandarddeviationoftheinterest,whichis
+facetheproblemthatCWTistruncatedwhentherecordiscom- treatedasahyper-parameterinourmethod.And𝑓 𝜃(x𝑢,𝑣)isthe
+pletelyplayed.WeneedtoapproximatetheCWTbytheobserved
+recommendationmodelforpredictinguserinterest,itsparameter
+watchtimetooptimizeourrecommendationmodel. isdenotedas𝜃.Thenthelog-likelihoodfunctionisutilizedinour
+4.2.1 Formulationofthecounterfactuallikelihoodfunction. Inspired training:
+bythesolutionofsurvivalanalysis[23],weregardtheobserved
+∑︁
+−(cid:0)𝑔′(𝑤 𝑢,𝑣;𝑐)−𝑓 𝜃(x𝑢,𝑣)(cid:1)2
+watchtimedistributionasthetruncateddistributionofCWT.The log(L𝑐)=
+2𝜎2
+overalllikelihoodfunctionofthetruncatedCWTcanbewrittenas: 𝑤𝑢,𝑣<𝑑𝑣
+(7)
+𝑙= (cid:214) Pr(𝑊𝑐 =𝑤 𝑢𝑐 ,𝑣,𝑊𝑐 <𝑑𝑣 |x𝑢,𝑣) (cid:214) Pr(𝑊𝑐 ≥𝑑𝑣 |x𝑢,𝑣)
++
+∑︁ logΦ(cid:20)𝑓 𝜃(x𝑢,𝑣)−𝑔′(𝑑 𝑣;𝑐)(cid:21)
+.
+𝑤𝑢𝑐 ,𝑣<𝑑𝑣 𝑤𝑢𝑐 ,𝑣≥𝑑𝑣 𝜎
+= (cid:214) Pr(𝑊𝑐 =𝑤𝑢,𝑣,𝑊𝑐 <𝑑𝑣 |x𝑢,𝑣) (cid:214) Pr(𝑊𝑐 ≥𝑑𝑣 |x𝑢,𝑣),
+𝑤𝑢,𝑣=𝑑𝑣
+Remark.Eq.(7)isderivedfrommaximumlikelihoodestimation
+𝑤𝑢,𝑣<𝑑𝑣 𝑤𝑢,𝑣=𝑑𝑣
+(4) (MLE):Theoptimalparametersarethosethatbestdescribethecur-
+where𝑊𝑐
+denotestherandomvariableofCWT.BasedonEq.(1),
+rentlyobserveddata.FortheCWT,weobservethatwhenthevideo
+wecanreplaceall𝑤 𝑢𝑐 ,𝑣 by𝑤 𝑢,𝑣 inthesecondline.Eq(4)contains isnotfullywatched,theCWTequalstotheactualwatchtime,this
+istheMSEpartofEq.(7).However,forthevideoisfullywatched,
+twoparts:when𝑤 𝑢,𝑣 <𝑑 𝑣,thelikelihoodfunctionequalsthejoint
+probabilitythatthecounterfactualdurationvariableisequalto𝑤 𝑢,𝑣 4Inpractice,weapproximateΦ(·)viaSigmoidfunctionfollow[55].
+
+CounteractingDurationBiasinVideoRecommendationviaCounterfactualWatchTime KDD’24,August25–29,2024,Barcelona,Spain
+Table1:Statisticsofthedatasetsadoptedinthisstudy truth,MAE(MeanAbsoluteError)andXAUC[49]wereusedasthe
+evaluationmeasures.NotethatXAUCevaluatesifthepredictions
+Dataset #Users #Videos #Interactions MeanCompleteRatio(%) oftwosamplesareinthesameorderastheiractualwatchtime.
+KuaiRand 26,988 6,598 1,266,560 17.5% Suchpairsareuniformlysampled,andthepercentileofsamples
+WeChat 20,000 96,418 7,310,108 45.5%
+thatarecorrectlyorderedbypredictionsisXAUC.AlargerXAUC
+Product 2,000,000 1,011,007 36,366,437 32.8%
+suggestsbetterwatchtimepredictionperformance.
+Asforevaluatingthetaskofrelevancerankingaccordingtouser
+theobservationweonlyknowisCWTmaylargerthantheactual interest,consideringthattheuserinterestlabelsareunobservedin
+watchtime,thisledtotheamplificationpartofEq.(7).Thisap- real-worlddatasets,wedefineduserinterestsbasedonCWT.Given
+proachtomodellingtruncateddataisalsocommoninendogenous a(𝑢,𝑣)pair,theuserinterestlabelisdefinedas:
+problems[3]andsurvivalanalysis[40].Althoughsimplyamplifies
+predictionsforfullywatchedvideoscannotpreciselymodelinter- 𝑟 𝑢,𝑣
+=(cid:26) 1 if(𝑑𝑣 ≤𝑤 0.7∧𝑤𝑢,𝑣=𝑑𝑣)∨(𝑑𝑣>𝑤 0.7∧𝑤𝑢,𝑣>𝑤 0.7)
+(8)
+est,itcanstillenhanceourinterestpredictionsinalargemargin, 0 otherwise.
+whichisverifiedinourexperimentalresults. The𝑤 0.7indicatesthe70%percentileofobservedwatchtime,which
+ThedetailedderivationfromEq.(5)toEq.(7)canbefoundin is considered as the threshold for CWT. When a user watches
+ourappendix.Finally,aduration-debiasedrecommendationmodel beyondthistime,weconsidertheusertobeinterested.Thesimilar
+canbeobtainedthroughmaximizingEq.(7): userinterestdefinitionisalsoadoptedin[18,51].Wewilldiscuss
+𝜃∗←argmax log(L𝑐). theunbiasednessof𝑟 𝑢,𝑣 inAppendixC.The𝑟 𝑢,𝑣 isusedasthe
+𝜃 groundtruthforevaluatingtherelevancerankingtask,AUCand
+nDCG@kareutilizedastheevaluationmetrics.
+4.3 Onlineinference
+Intheinferencestage,givenauser-videopair(𝑢,𝑣),thepredicted 5.1.3 Baselines. Intheexperiments,wecomparedtheproposed
+methodwiththefollowingbaselines:Threedurationdebiasedbase-
+interestandwatchtimecanbecalculatedbytheunbiasedrecom-
+mendationmodel𝑓
+𝜃∗
+parameterizedbythelearnedparameter𝜃∗: lines:PCR,WTG[53],D2Q[49],D2Co[51];Twowatchtime-
+weightedbaselines:WLR[12]andNDT[47];Andanaivebaseline:
+𝑟ˆ𝑢,𝑣 =Φ(cid:0)𝑓 𝜃∗(x𝑢,𝑣)(cid:1) ; VR(valueregression)whichdirectlyfittheobservedwatchtime.
+(cid:18) 1 (cid:19) Forrelevancerankingtask,wealsoprovidetheresultof Oracle,
+𝑤ˆ𝑢,𝑣 =clip −𝑐log𝑟ˆ𝑢,𝑣 −1,0,𝑑 𝑣 , whichistraineddirectlywiththelabeldefinedinEq.(8)andde-
+notetheupperboundperformanceofrelevanceranking.Mostof
+where𝑐𝑙𝑖𝑝(𝑥,𝑎,𝑏)functionmeansclippingthevalueof𝑥into[𝑎,𝑏].
+thesemethodsaredesignedinitiallyforrelevancerankingorwatch
+timepredictionviaatransformfunction.Fortherelevanceranking
+5 EXPERIMENTSANDRESULTS
+task,wedirectlyrankthecandidatevideosviathepredictedscores
+5.1 Experimentalsetting outputbytherecommendationmodelstrainedbythesemethods.
+We conducted experiments to verify the effectiveness of CWM Forthewatchtimepredictiontask,wefirsttransformthepredic-
+ontwolarge-scalepubliclyavailablebenchmarksandadataset tionofrecommendationmodelsintotheintervalofwatchtime
+collectedfromanindustrialvideoproduct.Moreimplementation viatheinversetransformfunctionofeachmethod.Thenweclip
+detailscanbefoundinAppendixB.Moreexperimentalresultscan theestimatedwatchtimeinto0to𝑑 𝑣 aswhatwedidinCWM.
+befoundinAppendixD.Thesourcecodeanddatasetareavailable TwoexceptionsareWLRandNDT,whichareimplementedbya
+athttps://github.com/hyz20/CWM.git. two-towermodelandhavenoinversetransformfunctionavailable.
+Therefore,WLRisonlyusedinwatchtimeprediction,andNDTis
+5.1.1 Datasets. Theexperimentswereconductedontwopublic usedonlyinrelevanceranking.
+real-worlddatasets:WeChatandKuaiRand.Theyarerespectively
+Toinvestigatethegeneralizationofourmethodandthebase-
+collectedfromtwolargemicro-videoplatforms,WechatChannels
+lines,weintegratethemwithdifferentbackbonemodels.Specifi-
+andKuaishou.Wealsoconductourevaluationinalarge-scaleprod- cally,weuserecommendationmodelsof FM[31],DCN[41]and
+uctdatasetfromourvideoplatform,whichhastensofbillionsof AutoInt[34]asthebackbonemodels.Thesethreebackbonemod-
+dailyactiveusers.WelisttheirstatisticinformationinTable1.Note
+elsrespectivelyrepresentthreetypesoffeatureinteractions:inner
+thatwepresenteachdataset’scompletelyplayedrecordpercent-
+product,outerproduct,andattentionmechanisms.
+ageinthelastcolumnofTable1.Sincethedurationbiasusually
+occursonthosecompletelyplayedrecords,theirpercentagesinall 5.2 Overallperformance
+recordsrepresenttheseverityofthedurationbiasofeachdataset.
+WecomparedourCWMwithotherbaselinesinthethreedatasets’
+Accordingtothestatistics,WeChathasthemostseriousbias,while
+watchtimepredictiontaskandrelevancerankingtask,asshown
+KuaiRandhastheleastbias.
+inTable2andTable3,respectively.ItcanbeseenthatourCWM
+5.1.2 Evaluation. Inthispaper,wenotonlyadoptourCWMfor obtainsthebestperformanceonalmostallthreedatasets,allback-
+rankingvideosbyuserinterest(i.e.,relevanceranking)butalsofor bonesandbothtaskssignificantly.WealsonotethatonWeChat,
+predictingusers’watchtime.Bothtasksareofgreatimportancein thosemethodsequippedwithdurationdebiasing(e.g.,WTGand
+realvideorecommendationscenarios.Asforthetaskofwatchtime D2Q)performevenworsethanthenaiveVRmethod.Thereasonis
+prediction,weutilizeusers’actualwatchtime𝑤 𝑢,𝑣 astheground thattheWeChatdatasethasmuchmorecompletelyplayedrecords
+
+KDD’24,August25–29,2024,Barcelona,Spain HaiyuanZhaoetal.
+Table2:ThewatchtimepredictionperformanceofCWMandotherbaselinesinKuaiRand,WeChatandProduct.Boldface
+meansthebest-performedmethods,whileunderlinemeansthesecondbest-performedmethods,superscripts†meansthe
+significancecomparedtothesecondbest-performedmethodswith𝑝 <0.05ofone-tailed𝑡-test.‘↓’denotesthatlowerisbetter
+forMAE,whilehigherisbetterforXAUC.
+Backbone FM DCN AutoInt
+Dataset
+Method VR PCR WLR D2Q WTG D2Co CWM VR PCR WLR D2Q WTG D2Co CWM VR PCR WLR D2Q WTG D2Co CWM
+MAE↓ 22.100 20.974 24.279 18.271 23.044 22.262 17.738† 21.698 21.910 21.044 18.131 21.318 21.564 17.420† 21.726 21.465 23.202 18.213 22.771 21.826 17.462†
+KuaiRand XAUC 0.683 0.697 0.668 0.646 0.666 0.662 0.714† 0.692 0.696 0.680 0.649 0.695 0.693 0.715† 0.685 0.699 0.668 0.646 0.673 0.667 0.713†
+MAE↓ 9.404 8.920 9.653 8.778 9.637 10.200 8.001† 9.317 8.709 9.149 7.987 8.727 8.667 7.902 9.405 8.910 9.815 8.815 9.623 10.031 7.969†
+WeChat XAUC 0.696 0.692 0.667 0.682 0.653 0.627 0.713† 0.703 0.717 0.684 0.721 0.718 0.718 0.717 0.700 0.693 0.661 0.679 0.653 0.634 0.714†
+MAE↓ 9.411 7.395 8.913 7.383 7.420 7.511 6.785† 9.384 7.320 8.887 7.374 7.398 7.443 6.648† 9.192 7.073 8.668 7.169 7.125 7.293 6.591†
+Product XAUC 0.808 0.801 0.816 0.817 0.816 0.812 0.833† 0.808 0.803 0.817 0.823 0.820 0.817 0.841† 0.810 0.801 0.810 0.819 0.820 0.818 0.835†
+Table3:TherelevancerankingperformanceofCWMandotherbaselinesinKuaiRand,WeChatandProduct.
+Backbone FM DCN AutoInt
+Dataset
+Method Oracle VR PCR D2Q WTG NDT D2Co CWM Oracle VR PCR D2Q WTG NDT D2Co CWM Oracle VR PCR D2Q WTG NDT D2Co CWM
+AUC 0.738 0.661 0.686 0.679 0.684 0.668 0.688 0.735† 0.745 0.665 0.693 0.684 0.718 0.679 0.730 0.735 0.737 0.655 0.691 0.679 0.692 0.669 0.688 0.734†
+KuaiRand nDCG@3 0.489 0.442 0.469 0.464 0.462 0.461 0.464 0.486† 0.497 0.448 0.469 0.466 0.471 0.464 0.480 0.484 0.490 0.444 0.469 0.466 0.466 0.459 0.464 0.484†
+AUC 0.711 0.639 0.651 0.645 0.602 0.629 0.573 0.703† 0.712 0.641 0.699 0.696 0.703 0.672 0.702 0.707 0.714 0.637 0.652 0.642 0.603 0.636 0.575 0.704†
+WeChat nDCG@3 0.588 0.520 0.540 0.540 0.528 0.510 0.527 0.581† 0.589 0.517 0.581 0.577 0.576 0.527 0.570 0.584 0.590 0.519 0.542 0.540 0.534 0.512 0.532 0.583†
+AUC 0.669 0.605 0.593 0.623 0.624 0.640 0.629 0.660† 0.678 0.608 0.593 0.625 0.626 0.649 0.636 0.663† 0.672 0.610 0.593 0.629 0.631 0.644 0.634 0.663†
+Product nDCG@3 0.589 0.556 0.472 0.513 0.523 0.553 0.531 0.582† 0.595 0.564 0.475 0.516 0.533 0.563 0.540 0.591† 0.591 0.558 0.479 0.514 0.527 0.559 0.533 0.585†
+6 4 2
+0 2
+4
+6
+(5s,13s] (13s,21s] (21s,32s] (32s,48s] (48s,69s] (69s,95s (] 95s,125 (s 1] 25s,17 (5 1s] 75s,25 (0 2s] 50s,400s]
+Duration Bins
+)%(CUAX_pmI KuaiRand 7.5 5.0 2.5
+0.0 C WW TGM 2.5
+D D2 2Q Co 5.0
+PCR 7.5
+(5s,13s] (13s,21s] (21s,32s] (32s,48s] (48s,69s] (69s,95s (] 95s,125 (s 1] 25s,17 (5 1s] 75s,25 (0 2s] 50s,400s]
+Duration Bins
+(a)watchtimeprediction
+)%(CUA_pmI KuaiRand CWM 0.72 WTG D2Q D2Co 0.70 PCR
+0.68
+0.66
+CWM-C CWM-L CWM
+(b)relevanceranking
+Figure8:TherelativeimprovementofeachmethodstoVR
+ondifferentdurationbinsofKuaiRand.
+(45.5%) than that of KuaiRand (17.5%), showing that increasing
+completelyplayedrecordsmakecurrentdebiasingmethodsget
+ineffective.Incontrast,CWMimprovedmoreonWeChatthanon
+otherdatasets.Theresultsalsoverifiedthemotivationofthispaper:
+Currentmethodsregardallcompletelyplayedrecordsasthesame
+highinterest,violatingrealinterestdistributioninrealdata.There-
+fore,whenthedatasetcontainsmanycompletelyplayedrecords
+(i.e.,recordswithtruncatedCWT),theperformanceofthesemeth-
+odsgetsworse.Instead,CWMcanmodelusers’truncatedCWTto
+estimateuserinterestbetterandpredictusers’actualwatchtime.
+5.3 Effectivenessondurationdebiasing
+ToinvestigatewhyourCWMismoreeffectiveondurationdebi-
+asingthanotherbaselines,wedividedtheKuaiRanddatasetinto
+tenequalpartswithdifferentdurationranges.Thenweevaluate
+eachmodelonthesubsetofKuaiRand.Theresultispresentedin
+Fig.8.Notethattheevaluationmetrichasdifferentvaluescales
+amongdifferentsubsets,sowereporttherelativeimprovement
+ofeachmethodtoVRtoshowtheextenttowhichthesemethods
+addressdurationbias.TherelativeimprovementisΔ𝐼𝑚𝑝 = 𝑣𝑚 𝑣−𝑣 0,
+where𝑣 0 isthemetricvalueofVRand𝑣 𝑚 isthemetricvalue0 of
+eachmethod.
+CUAX
+KuaiRand
+0.725 FM DCN 0.700 AutoInt 0.675
+0.650
+CWM-C CWM-L CWM
+CUAX
+WeChat
+FM DCN AutoInt
+0.49
+0.48
+0.47
+0.46
+0.45 CWM-C CWM-L CWM
+3@GCDn
+KuaiRand 0.600
+FM
+DCN 0.575
+AutoInt
+0.550
+0.525
+0.500 CWM-C CWM-L CWM
+3@GCDn
+WeChat
+FM
+DCN
+AutoInt
+Figure 9: Ablation study on CWM in both KuaiRand and
+WeChat.Toptwo:watchtimepredictiontask.Bottomtwo:
+relevancerankingtask.
+Fig8(a)illustratestheperformanceofeachmethodonthewatch
+timepredictiontask,measuredbyΔ𝐼𝑚𝑝onXAUC.Fig8(b)illus-
+tratestheperformanceofeachmethodontherelevanceranking
+task,measuredbyΔ𝐼𝑚𝑝onAUC.Inbothtasks,mostbaselinesper-
+formbetterthanVRinshortvideos(i.e.,duration<30s),indicating
+theireffectivenessondurationdebiasingtosomeextent.However,
+sincetheysimplyregardcompletelyplayedrecordsasequallyhigh
+interest,CWMperformedbetterthanthem.Wecanfindthatthese
+baselinesperformworseinlongervideosonbothtasks.Thisisalso
+becausetheyregardshort,completelyplayedvideorecordingsas
+highinterest,leadingtounderestimatinguserinterestandwatch
+timepredictionforlongervideos.Incontrast,CWMcanmodel
+theCWTandassignfairerinterestestimatestovideosofdifferent
+durations.
+5.4 Comparisonwithmorebaselines
+WehavecomparedourCWMwithotherlabel-correctionmethods
+before,butthesuperiorityofCWMcomparedwithotherstate-
+of-the-artmethodsremainsunclear.Therefore,wefurtherimple-
+mentedCVRDD[36],DCR[20],andVLDRec[30].CVRDDtreats
+
+CounteractingDurationBiasinVideoRecommendationviaCounterfactualWatchTime KDD’24,August25–29,2024,Barcelona,Spain
+Table4:TherankingperformanceofCWMandmorestate- Table5:RelativeimprovementofCWMtoproductbaseline
+of-the-artbaselinesinKuaiRand,WeChatandProduct. forone-weekonlineA/Btesting.
+Dataset KuaiRand WeChat Product MWT VV CTR
+Backbone Method AUC nDCG@3 AUC nDCG@3 AUC nDCG@3
+Product - - -
+Oracle 0.738 0.489 0.711 0.588 0.669 0.589
+VLDRec 0.689 0.463 0.655 0.540 0.633 0.543 CWM +2.9% +2.5% +0.3%
+FM DCR 0.695 0.469 0.659 0.542 0.639 0.540
+CVRDD 0.682 0.462 0.662 0.545 0.629 0.535
+CWM 0.735† 0.486† 0.703† 0.581† 0.660† 0.582† 5.6 OnlineA/BTesting
+Oracle 0.745 0.497 0.712 0.589 0.678 0.595
+VLDRec 0.701 0.468 0.679 0.547 0.647 0.543 ToverifytheeffectivenessofCWMinreal-worldrecommendation
+DCN DCR 0.716 0.480 0.681 0.559 0.649 0.554 scenarios,weconductedonlineexperimentsinourcommercialsys-
+CVRDD 0.684 0.473 0.687 0.556 0.630 0.535
+CWM 0.735† 0.484 0.707† 0.584† 0.663† 0.591† tem,apopularplatformwithtensofmillionsofactiveusersevery
+Oracle 0.737 0.490 0.714 0.590 0.672 0.591 day.Thebaselineisahighly-optimizedmulti-taskmodeldeployed
+VLDRec 0.698 0.472 0.661 0.546 0.638 0.550 fortheproduct.BoththebaselineandCWMweretrainedincremen-
+AutoInt DCR 0.699 0.475 0.662 0.547 0.643 0.546
+tallyonthesameanonymousloggingdata,andeachoneserves
+CVRDD 0.683 0.470 0.664 0.555 0.639 0.536
+CWM 0.734† 0.484 0.704† 0.583† 0.663† 0.585† 5%traffics,randomlyselectedfromthesameusergroup.Asfor
+shortvideorecommendations,improvingcustomers’meanwatch
+time(MWT)isthemaintarget.Othermetrics,suchasaverage
+validviewingvolume(VV)andclick-throughrate(CTR),arealso
+adopted.AccordingtotheonlineA/BtestingresultsshowninTa-
+ble5,wecanseethatCWMdoeshelpuserstoentertainthemselves
+videodurationasamediationfactor,DCRconsidersvideoduration
+andspendmoretimewatchingtheshortvideos.
+asaconfounder,andVLDRecemploysPCRasthelabelwithpair-
+wiselearning,allprimarilyfeature-basedordata-basedapproaches.
+6 CONCLUSION
+Incontrast,ourlabel-correctionmethod,CWM,consistentlyout-
+performsthesebaselinesintermsofAUCandnDCG@3metrics, Inthisstudy,weaimtocounteractthedurationbiasinvideorec-
+asshowninTable4.ThesuperiorityofCWMisconsistentacross ommendation.Weproposecounterfactualwatchtime(CWT)for
+alldatasetsandbackbonemodels.Inconclusion,ourCWMmethod interpretingthedurationbiasinvideorecommendationandpoint
+demonstrates superior performance in mitigating duration bias outthatthedurationbiasiscausedbythetruncationoftheuser’s
+bymodelingcounterfactualwatchtime(CWT),highlightingits CWTbyvideoduration.ACounterfactualWatchModel(CWM)is
+effectivenessindeliveringmoreaccurateandunbiasedrecommen- thendeveloped,revealingthattheCWTequalsthetimeusersget
+dationsinshortvideorecommendationsystems. themaximumbenefitfromvideorecommendersystems.Acost-
+basedcorrectionfunctionisdefinedtotransformtheCWTinto
+theuserinterest,andtheunbiasedrecommendationmodelcanbe
+5.5 Ablationstudy
+learnedbyoptimizingacounterfactuallikelihoodfunctiondefined
+WealsoinvestigatehowCWM’stwocomponentsbenefittheCWM, overobserveduserwatchtimes.Experimentalresultsonthreeof-
+i.e.,thecost-basedtransformfunctionandthecounterfactuallikeli- flinerealdatasetsandonlineA/Btestingindicatethesuperiority
+hoodfunctions.Thecost-basedtransformfunctionestimatesuser oftheproposedCWM.
+interestfromtheCWT,andthecounterfactuallikelihoodfunction
+ACKNOWLEDGMENTS
+optimizesthemodelunbiasedlyusingtheobservedwatchtime.
+Specifically,weproducetwovariantsforCWM.Thefirstisdenoted ThisworkwasfundedbytheNationalKeyR&DProgramofChina
+as CWM-C, which removes the cost-based transform function (2023YFA1008704), the National Natural Science Foundation of
+anddirectlyappliestheoriginalwatchtimetothecounterfactual China(No.62377044),BeijingKeyLaboratoryofBigDataManage-
+likelihoodfunction.ThesecondoneisdenotedasCWM-L,which mentandAnalysisMethods,MajorInnovation&PlanningInterdis-
+replacesthecounterfactuallikelihoodfunctionwithameansquared ciplinaryPlatformforthe“Double-FirstClass”Initiative,fundsfor
+errorlossfunction. buildingworld-classuniversities(disciplines)ofRenminUniversity
+Fig.9demonstratestheperformancecomparisonbetweenCWM ofChina,andPCC@RUC.
+anditsvariantsontwodatasetsandtwotasks.OnKuaiRand,CWM-
+LobtainssimilarperformancestoCWM,whileCWM-Chasasig- REFERENCES
+nificantperformancedroptoCWM.WearguethatwhenCWTis [1] QingyaoAi,KepingBi,ChengLuo,JiafengGuo,andW.BruceCroft.2018.Un-
+lesstruncated(e.g.,KuaiRandhasonly17.5%completelyplayed biasedLearningtoRankwithUnbiasedPropensityEstimation.InThe41stIn-
+ternationalACMSIGIRConferenceonResearchDevelopmentinInformationRe-
+records),howitisconvertedintoaninterestestimationcanpri-
+trieval(AnnArbor,MI,USA)(SIGIR’18).ACM,NewYork,NY,USA,385–394.
+marilyaffectperformance.OnWeChat,CWM-Cobtainsasimilar https://doi.org/10.1145/3209978.3209986
+performancetoCWM,whileCWM-Lhasasignificantperformance [2] FuadAleskerov,DenisBouyssou,andBernardMonjardet.2007. Utilitymaxi-
+mization,choiceandpreference.Vol.16.SpringerScience&BusinessMedia.
+droptoCWM.WearguethatwhenCWTisheavilytruncated(e.g., [3] TakeshiAmemiya.1984.Tobitmodels:Asurvey.Journalofeconometrics24,1-2
+WeChathas45.5%completelyplayedrecords),howtheobserved (1984),3–61.
+[4] AlexeyBorisov,IlyaMarkov,MaartendeRijke,andPavelSerdyukov.2016.ANeu-
+watchtimeisusedtoapproximatethelearningofCWTbecomes
+ralClickModelforWebSearch.InProceedingsofthe25thInternationalConference
+theperformancebottleneck. onWorldWideWeb(Montréal,Québec,Canada)(WWW’16).InternationalWorld
+
+KDD’24,August25–29,2024,Barcelona,Spain HaiyuanZhaoetal.
+WideWebConferencesSteeringCommittee,RepublicandCantonofGeneva, Recommendation. ACMTrans.Inf.Syst.41,3,Article53(feb2023),23pages.
+CHE,531–541. https://doi.org/10.1145/2872427.2883033 https://doi.org/10.1145/3559757
+[5] QingpengCai,ZhenghaiXue,ChiZhang,WanqiXue,ShuchangLiu,Ruohan [21] RobertA.Jacobs,MichaelI.Jordan,StevenJ.Nowlan,andGeoffreyE.Hinton.
+Zhan,XueliangWang,TianyouZuo,WentaoXie,DongZheng,PengJiang,and 1991.AdaptiveMixturesofLocalExperts.NeuralComput.3,1(1991),79–87.
+KunGai.2023.Two-StageConstrainedActor-CriticforShortVideoRecommen- [22] ThorstenJoachims,AdithSwaminathan,andTobiasSchnabel.2017.Unbiased
+dation.InProceedingsoftheACMWebConference2023,WWW2023,Austin,TX, Learning-to-RankwithBiasedFeedback.InProceedingsoftheTenthACMInterna-
+USA,30April2023-4May2023.ACM,865–875. tionalConferenceonWebSearchandDataMining(Cambridge,UnitedKingdom)
+[6] JianxinChang,ChenbinZhang,YiqunHui,DeweiLeng,YananNiu,YangSong, (WSDM’17).ACM,NewYork,NY,USA,781–789. https://doi.org/10.1145/3018661.
+andKunGai.2023.PEPNet:ParameterandEmbeddingPersonalizedNetwork 3018699
+forInfusingwithPersonalizedPriorInformation.CoRRabs/2302.01115(2023). [23] YanLi,KevinS.Xu,andChandanK.Reddy.2016. RegularizedParametric
+[7] OlivierChapelleandYaZhang.2009.ADynamicBayesianNetworkClickModel RegressionforHigh-dimensionalSurvivalAnalysis.InProceedingsofthe2016
+forWebSearchRanking.InProceedingsofthe18thInternationalConference SIAMInternationalConferenceonDataMining,Miami,Florida,USA,May5-7,
+onWorldWideWeb(Madrid,Spain)(WWW’09).AssociationforComputing 2016,SanjayChawlaVenkatasubramanianandWagnerMeiraJr.(Eds.).SIAM,
+Machinery,NewYork,NY,USA,1–10. https://doi.org/10.1145/1526709.1526711 765–773. https://doi.org/10.1137/1.9781611974348.86
+[8] Jia Chen, Jiaxin Mao, Yiqun Liu, Min Zhang, and Shaoping Ma. 2020. A [24] ShangLiu,ZhenzhongChen,HongyiLiu,andXinghaiHu.2019. User-Video
+Context-AwareClickModelforWebSearch.InProceedingsofthe13thIn- Co-AttentionNetworkforPersonalizedMicro-VideoRecommendation.InThe
+ternationalConferenceonWebSearchandDataMining(Houston,TX,USA) WorldWideWebConference(SanFrancisco,CA,USA)(WWW’19).Association
+(WSDM’20).AssociationforComputingMachinery,NewYork,NY,USA,88–96. forComputingMachinery,NewYork,NY,USA,3020–3026. https://doi.org/10.
+https://doi.org/10.1145/3336191.3371819 1145/3308558.3313513
+[9] MouxiangChen,ChenghaoLiu,JianlingSun,andStevenC.H.Hoi.2021.Adapt- [25] YiyuLiu,QianLiu,YuTian,ChangpingWang,YananNiu,YangSong,andChen-
+ingInteractionalObservationEmbeddingforCounterfactualLearningtoRank. liangLi.2021.Concept-AwareDenoisingGraphNeuralNetworkforMicro-Video
+InProceedingsofthe44thInternationalACMSIGIRConferenceonResearchand Recommendation.InProceedingsofthe30thACMInternationalConferenceonIn-
+DevelopmentinInformationRetrieval(VirtualEvent,Canada)(SIGIR’21).As- formationKnowledgeManagement(VirtualEvent,Queensland,Australia)(CIKM
+sociationforComputingMachinery,NewYork,NY,USA,285–294. https: ’21).AssociationforComputingMachinery,NewYork,NY,USA,1099–1108.
+//doi.org/10.1145/3404835.3462901 https://doi.org/10.1145/3459637.3482417
+[10] Kyung-JaeCho,Yeon-ChangLee,KyungsikHan,JaehoChoi,andSang-WookKim. [26] JiaqiMa,ZheZhao,XinyangYi,JilinChen,LichanHong,andEdH.Chi.2018.
+2019.No,that’snotmyfeedback:TVshowrecommendationusingwatchable ModelingTaskRelationshipsinMulti-taskLearningwithMulti-gateMixture-
+interval.In2019IEEE35thInternationalConferenceonDataEngineering(ICDE). of-Experts.InProceedingsofthe24thACMSIGKDDInternationalConferenceon
+IEEE,316–327. KnowledgeDiscovery&DataMining,KDD2018,London,UK,August19-23,2018.
+[11] AleksandrChuklin,IlyaMarkov,andMaartendeRijke.2016.ClickModelsfor ACM,1930–1939.
+WebSearchandTheirApplicationstoIR:WSDM2016Tutorial.InProceedings [27] JiaxinMao,ChengLuo,MinZhang,andShaopingMa.2018.ConstructingClick
+oftheNinthACMInternationalConferenceonWebSearchandDataMining(San ModelsforMobileSearch.InThe41stInternationalACMSIGIRConferenceon
+Francisco,California,USA)(WSDM’16).AssociationforComputingMachinery, Research&DevelopmentinInformationRetrieval(AnnArbor,MI,USA)(SIGIR
+NewYork,NY,USA,689–690. https://doi.org/10.1145/2835776.2855113 ’18).AssociationforComputingMachinery,NewYork,NY,USA,775–784. https:
+[12] PaulCovington,JayAdams,andEmreSargin.2016. DeepNeuralNetworks //doi.org/10.1145/3209978.3210060
+forYouTubeRecommendations.InProceedingsofthe10thACMConferenceon [28] YoojinPark,JinohOh,andHwanjoYu.2017.RecTime:Real-timerecommender
+RecommenderSystems(Boston,Massachusetts,USA)(RecSys’16).Associationfor systemforonlinebroadcasting.InformationSciences409(2017),1–16.
+ComputingMachinery,NewYork,NY,USA,191–198. https://doi.org/10.1145/ [29] JiaruiQin,JiachenZhu,YankaiLiu,JunchaoGao,JianjieYing,ChaoxiongLiu,
+2959100.2959190 DingWang,JunlanFeng,ChaoDeng,XiaozhengWang,etal.2023.Learningto
+[13] PaulCovington,JayAdams,andEmreSargin.2016. DeepNeuralNetworks distinguishmulti-usercouplingbehaviorsfortvrecommendation.InProceedings
+forYouTubeRecommendations.InProceedingsofthe10thACMConferenceon oftheSixteenthACMInternationalConferenceonWebSearchandDataMining.
+RecommenderSystems,Boston,MA,USA,September15-19,2016.ACM,191–198. 204–212.
+[14] NickCraswell,OnnoZoeter,MichaelTaylor,andBillRamsey.2008.AnExper- [30] YuhanQuan,JingtaoDing,ChenGao,NianLi,LinglingYi,DepengJin,andYong
+imentalComparisonofClickPosition-BiasModels.InProceedingsofthe2008 Li.2023.AlleviatingVideo-lengthEffectforMicro-videoRecommendation.ACM
+InternationalConferenceonWebSearchandDataMining(PaloAlto,California, Trans.Inf.Syst.42,2,Article44(nov2023),24pages. https://doi.org/10.1145/
+USA)(WSDM’08).AssociationforComputingMachinery,NewYork,NY,USA, 3617826
+87–94. https://doi.org/10.1145/1341531.1341545 [31] SteffenRendle.2012.FactorizationMachineswithLibFM.ACMTrans.Intell.Syst.
+[15] JamesDavidson,BenjaminLiebald,JunningLiu,PalashNandy,TaylorVanVleet, Technol.3,3,Article57(may2012),22pages. https://doi.org/10.1145/2168752.
+UllasGargi,SujoyGupta,YuHe,MikeLambert,BlakeLivingston,andDasarathi 2168771
+Sampath.2010.TheYouTubeVideoRecommendationSystem.InProceedingsof [32] YutaSaito,SuguruYaginuma,YutaNishino,HayatoSakata,andKazuhideNakata.
+theFourthACMConferenceonRecommenderSystems(Barcelona,Spain)(RecSys 2020.UnbiasedRecommenderLearningfromMissing-Not-At-RandomImplicit
+’10).AssociationforComputingMachinery,NewYork,NY,USA,293–296. https: Feedback.InProceedingsofthe13thInternationalConferenceonWebSearchand
+//doi.org/10.1145/1864708.1864770 DataMining(Houston,TX,USA)(WSDM’20).AssociationforComputingMa-
+[16] GeorgesE.DupretandBenjaminPiwowarski.2008.AUserBrowsingModelto chinery,NewYork,NY,USA,501–509. https://doi.org/10.1145/3336191.3371783
+PredictSearchEngineClickDatafromPastObservations..InProceedingsofthe [33] TobiasSchnabel,AdithSwaminathan,AshudeepSingh,NavinChandak,and
+31stAnnualInternationalACMSIGIRConferenceonResearchandDevelopmentin ThorstenJoachims.2016.Recommendationsastreatments:Debiasinglearning
+InformationRetrieval(Singapore,Singapore)(SIGIR’08).AssociationforComput- andevaluation.Ininternationalconferenceonmachinelearning.PMLR,1670–
+ingMachinery,NewYork,NY,USA,331–338. https://doi.org/10.1145/1390334. 1679.
+1390392 [34] WeipingSong,ChenceShi,ZhipingXiao,ZhijianDuan,YewenXu,MingZhang,
+[17] LingyueFu,JianghaoLin,WeiwenLiu,RuimingTang,WeinanZhang,RuiZhang, andJianTang.2019. AutoInt:AutomaticFeatureInteractionLearningvia
+andYongYu.2023.AnF-ShapeClickModelforInformationRetrievalonMulti- Self-AttentiveNeuralNetworks.InProceedingsofthe28thACMInternational
+BlockMobilePages.InProceedingsoftheSixteenthACMInternationalConference ConferenceonInformationandKnowledgeManagement(Beijing,China)(CIKM
+onWebSearchandDataMining(Singapore,Singapore)(WSDM’23).Association ’19).AssociationforComputingMachinery,NewYork,NY,USA,1161–1170.
+forComputingMachinery,NewYork,NY,USA,1057–1065. https://doi.org/10. https://doi.org/10.1145/3357384.3357925
+1145/3539597.3570365 [35] HongyanTang,JunningLiu,MingZhao,andXudongGong.2020. Progres-
+[18] ChongmingGao,ShijunLi,YuanZhang,JiaweiChen,BiaoLi,WenqiangLei, siveLayeredExtraction(PLE):ANovelMulti-TaskLearning(MTL)Modelfor
+PengJiang,andXiangnanHe.2022. KuaiRand:AnUnbiasedSequentialRec- PersonalizedRecommendations.InRecSys2020:FourteenthACMConferenceon
+ommendationDatasetwithRandomlyExposedVideos.InProceedingsofthe RecommenderSystems,VirtualEvent,Brazil,September22-26,2020.ACM,269–278.
+31stACMInternationalConferenceonInformationandKnowledgeManagement [36] Shisong Tang, Qing Li, Dingmin Wang, Ci Gao, Wentao Xiao, Dan Zhao,
+(Atlanta,GA,USA)(CIKM’22).5pages. https://doi.org/10.1145/3511808.3557624 YongJiang,QianMa,andAoyangZhang.2023. CounterfactualVideoRec-
+[19] YunjunGao,YuntaoDu,YujiaHu,LuChen,XinjunZhu,ZiquanFang,andBaihua ommendationforDurationDebiasing.InProceedingsofthe29thACMSIGKDD
+Zheng.2022.Self-GuidedLearningtoDenoiseforRobustRecommendation.In ConferenceonKnowledgeDiscoveryandDataMining(<conf-loc>,<city>Long
+Proceedingsofthe45thInternationalACMSIGIRConferenceonResearchand Beach</city>,<state>CA</state>,<country>USA</country>,</conf-loc>)(KDD
+DevelopmentinInformationRetrieval(Madrid,Spain)(SIGIR’22).Associationfor ’23).AssociationforComputingMachinery,NewYork,NY,USA,4894–4903.
+ComputingMachinery,NewYork,NY,USA,1412–1422. https://doi.org/10.1145/ https://doi.org/10.1145/3580305.3599797
+3477495.3532059 [37] ShisongTang,QingLi,DingminWang,CiGao,WentaoXiao,DanZhao,Yong
+[20] XiangnanHe,YangZhang,FuliFeng,ChonggangSong,LinglingYi,GuohuiLing, Jiang,QianMa,andAoyangZhang.2023.CounterfactualVideoRecommendation
+andYongdongZhang.2023.AddressingConfoundingFeatureIssueforCausal forDurationDebiasing.InProceedingsofthe29thACMSIGKDDConference
+
+CounteractingDurationBiasinVideoRecommendationviaCounterfactualWatchTime KDD’24,August25–29,2024,Barcelona,Spain
+onKnowledgeDiscoveryandDataMining(LongBeach,CA,USA)(KDD’23). ACM,NewYork,NY,USA,2980–2991. https://doi.org/10.1145/3442381.3449788
+AssociationforComputingMachinery,NewYork,NY,USA,4894–4903. https: [55] TengfeiZhou,HuiQian,ZebangShen,ChaoZhang,ChengweiWang,Shichen
+//doi.org/10.1145/3580305.3599797 Liu,andWenwuOu.2018.JUMP:ajointpredictorforuserclickanddwelltime.
+[38] RichardFThompsonandWilliamASpencer.1966.Habituation:amodelphe- InProceedingsofthe27thInternationalJointConferenceonArtificialIntelligence.
+nomenonforthestudyofneuronalsubstratesofbehavior.Psychologicalreview AAAIPress.3704–3710.
+73,1(1966),16.
+[39] NicolaasJVriend.1996. Rationalbehaviorandeconomictheory. Journalof
+A PROOFOFTHEOREM1
+EconomicBehavior&Organization29,2(1996),263–285.
+[40] PingWang,YanLi,andChandanKReddy.2019.Machinelearningforsurvival Proof. Aswehaveanalyzedbefore,theCWT𝑤 𝑢𝑐 ,𝑣corresponds
+[41] a Rn ua ol xy is Wis: aA ngs ,u Br iv ne Fy u. ,A GC aM ngC Fo um ,ap nu dti Mng inS gu lr iv ae ny gs W(C aS nU gR .2) 05 11 7, .6 D( e2 e0 p19 &), C1 r– o3 s6 s. Network touserinterests𝑟 𝑢,𝑣,i.e.,𝑤 𝑢𝑐 ,𝑣 =𝑔(𝑟 𝑢,𝑣).BasedonEq.(1),wecan
+forAdClickPredictions.InProceedingsoftheADKDD’17(Halifax,NS,Canada) obtainthefunctionsof𝑤 𝑢,𝑣 on𝑟 𝑢,𝑣:
+(ADKDD’17).AssociationforComputingMachinery,NewYork,NY,USA,Article
+12,7pages. https://doi.org/10.1145/3124749.3124754 𝑤 𝑢,𝑣 =min(𝑔(𝑟 𝑢,𝑣),𝑑 𝑣), 𝑟 𝑢,𝑣 ∈R, 𝑤 𝑢,𝑣 ∈W
+[42] WenjieWang,FuliFeng,XiangnanHe,LiqiangNie,andTat-SengChua.2021.
+DenoisingImplicitFeedbackforRecommendation.InProceedingsofthe14th Next,weneedtoprovethattheabovefunctiondoesnotalwayshave
+ACMInternationalConferenceonWebSearchandDataMining(VirtualEvent, aninversefunction,w.r.tany𝑤 𝑢,𝑣.SimilartoEq.(1),werewrite
+Israel)(WSDM’21).AssociationforComputingMachinery,NewYork,NY,USA,
+theabovefunctionasasegmentedfunction:
+373–381. https://doi.org/10.1145/3437963.3441800
+[43] XuanhuiWang,MichaelBendersky,DonaldMetzler,andMarcNajork.2016. 𝑟 𝑢,𝑣 =𝑔−1(𝑤 𝑢,𝑣), if𝑤 𝑢,𝑣 <𝑑 𝑣;
+LearningtoRankwithSelectionBiasinPersonalSearch.InProceedingsofthe39th
+InternationalACMSIGIRConferenceonResearchandDevelopmentinInformation 𝑟 𝑢,𝑣 ≥𝑔−1(𝑤 𝑢,𝑣), if𝑤 𝑢,𝑣 =𝑑 𝑣;
+Retrieval(Pisa,Italy)(SIGIR’16).ACM,NewYork,NY,USA,115–124.
+[44] YuWang,XinXin,ZaiqiaoMeng,JoemonMJose,FuliFeng,andXiangnan Notethatwhen𝑤 𝑢,𝑣 =𝑑 𝑣 (i.e.,completelyplayavideo),wecan
+He.2022.LearningRobustRecommendersthroughCross-ModelAgreement.In
+ProceedingsoftheACMWebConference2022(VirtualEvent,Lyon,France)(WWW onlyobtainaninequalitybetween𝑤 𝑢,𝑣 and𝑟 𝑢,𝑣,thusprovingthat
+’22).AssociationforComputingMachinery,NewYork,NY,USA,2015–2025. thereisnosuchaninversefunction𝑟 𝑢,𝑣 =𝑔−1(𝑤 𝑢,𝑣)forall𝑤 𝑢,𝑣 ∈
+https://doi.org/10.1145/3485447.3512202 W. □
+[45] TianxinWei,FuliFeng,JiaweiChen,ZiweiWu,JinfengYi,andXiangnanHe.
+2021. Model-AgnosticCounterfactualReasoningforEliminatingPopularity
+BiasinRecommenderSystem.InProceedingsofthe27thACMSIGKDDCon- B DETAILEDEXPERIMENTALSETTING
+ferenceonKnowledgeDiscoveryDataMining(VirtualEvent,Singapore)(KDD
+’21).AssociationforComputingMachinery,NewYork,NY,USA,1791–1800. Inourpaper,webrieflydescribedthedatasetusedinourpapers
+https://doi.org/10.1145/3447548.3467289 andthebaselinesduetothelimitationofpages.Now,weputa
+[46] PengWu,HaoxuanLi,YuhaoDeng,WenjieHu,QuanyuDai,ZhenhuaDong,
+moredetailedexperimentalsettinginthisappendix.
+JieSun,RuiZhang,andXiao-HuaZhou.2022. OntheOpportunityofCausal
+LearninginRecommendationSystems:Foundation,Estimation,Predictionand WeChat.ThisdatasetisreleasedbyWeChatBigDataChallenge
+Challenges.InProceedingsoftheThirty-FirstInternationalJointConferenceon 2021,containingtheWeChatChannelslogswithintwoweeks.Fol-
+ArtificialIntelligence,IJCAI-22.5646–5653. SurveyTrack.
+[47] RuobingXie,LinMa,ShaoliangZhang,FengXia,andLeyuLin.2023.Reweighting lowingthepracticein[53],wesplitthedataintothefirst10days,
+ClickswithDwellTimeinRecommendation.InCompanionProceedingsofthe themiddle2days,andthelast2daysastraining,validation,and
+ACMWebConference2023(Austin,TX,USA)(WWW’23Companion).Association
+testset.Wenoticedthatthereisanunusuallyhighproportionof
+forComputingMachinery,NewYork,NY,USA,341–345. https://doi.org/10.
+1145/3543873.3584624 60svideosamongthedataset(17.3%),soourexperimentswerecon-
+[48] BowenYuan,YaxuLiu,Jui-YangHsia,ZhenhuaDong,andChih-JenLin.2020.Un- ductedonasubsetof60svideosthatwereexcluded(i.e.,theduration
+biasedAdClickPredictionforPosition-AwareAdvertisingSystems.InFourteenth
+rangeis[5s,59s]inthesubset).Theadoptedinputfeaturesinclude
+ACMConferenceonRecommenderSystems(VirtualEvent,Brazil)(RecSys’20).
+ACM,NewYork,NY,USA,368–377. https://doi.org/10.1145/3383313.3412241 userid,feedid,device,authorid,bgm_song_id,bgm_singer_id,user_type.
+[49] RuohanZhan,ChanghuaPei,QiangSu,JianfengWen,XueliangWang,Guanyu KuaiRand[18].KuaiRandisanewlyreleasedsequentialrecom-
+Mu,DongZheng,PengJiang,andKunGai.2022.DeconfoundingDurationBias
+inWatch-TimePredictionforVideoRecommendation.InProceedingsofthe28th mendationdatasetcollectedfromKuaiShou.Assuggestedin[18],
+ACMSIGKDDConferenceonKnowledgeDiscoveryandDataMining(Washington we utilized one of the subsets KuaiRand-pure in this study. To
+DC,USA)(KDD’22).AssociationforComputingMachinery,NewYork,NY,USA,
+mitigatethesparsityproblem,weselecteddatafromwhichthe
+4472–4481. https://doi.org/10.1145/3534678.3539092
+[50] YangZhang,FuliFeng,XiangnanHe,TianxinWei,ChonggangSong,Guohui video duration is up to 400s. We split the data into the first 14
+Ling,andYongdongZhang.2021.CausalInterventionforLeveragingPopularity days,themiddle7days,andthelast10daysastraining,validation,
+BiasinRecommendation.InProceedingsofthe44thInternationalACMSIGIR
+andtestset.Theadoptedinputfeaturesincludeuser_id,video_id,
+ConferenceonResearchandDevelopmentinInformationRetrieval(VirtualEvent,
+Canada)(SIGIR’21).ACM,NewYork,NY,USA,11–20. https://doi.org/10.1145/ author_id,music_id,follow_user_num_range,register_days_range,
+3404835.3462875 fans_user_num_range,friend_user_num_range,user_active_degree,
+[51] HaiyuanZhao,LeiZhang,JunXu,GuohaoCai,ZhenhuaDong,andJi-RongWen.
+2023.UncoveringUserInterestfromBiasedandNoisedWatchTimeinVideo most_popular_tag,video_type,upload_type,tab.
+Recommendation.InProceedingsofthe17thACMConferenceonRecommenderSys- Product.Wecollecttheproductdatasetfromtheserverlogof
+tems(Singapore,Singapore)(RecSys’23).AssociationforComputingMachinery,
+ourvideoplatform,whichsamplesthelogdatafromJune19,2023
+NewYork,NY,USA,528–539. https://doi.org/10.1145/3604915.3608797
+[52] ZheZhao,LichanHong,LiWei,JilinChen,AniruddhNath,ShawnAndrews, toJune25,2023.Duetothedataimbalance,weinterceptedthe
+AditeeKumthekar,MaheswaranSathiamoorthy,XinyangYi,andEdH.Chi. recordsbelow42secondsasthefinaltrainingset.Wetrainedour
+2019.Recommendingwhatvideotowatchnext:amultitaskrankingsystem.In
+modelonthisdatasetandtestedtheminthelasttwohoursofserver
+Proceedingsofthe13thACMConferenceonRecommenderSystems,RecSys2019,
+Copenhagen,Denmark,September16-20,2019.ACM,43–51. logdata.ThepretrainedIDembeddingandsideinformationare
+[53] YuZheng,ChenGao,JingtaoDing,LinglingYi,DepengJin,YongLi,andMeng usedasfeatureinputsforallmethods.
+Wang.2022.DVR:Micro-VideoRecommendationOptimizingWatch-Time-Gain
+underDurationBias.InProceedingsofthe30thACMInternationalConferenceon Inthisstudy,weimplementWLRfollowingthedetailsin[49].
+Multimedia(Lisboa,Portugal)(MM’22).AssociationforComputingMachinery, ForD2Q,thegroupnumberissetto60inKuaiRand,30inWeChat,
+NewYork,NY,USA,334–345. https://doi.org/10.1145/3503161.3548428
+and10inourProductdataset.ForNDT,wesetitshyper-parameters
+[54] YuZheng,ChenGao,XiangLi,XiangnanHe,YongLi,andDepengJin.2021.Disen-
+tanglingUserInterestandConformityforRecommendationwithCausalEmbed- astheauthorsuggestedintheirpaper[47].ForD2Co,thewindow
+ding.InProceedingsoftheWebConference2021(Ljubljana,Slovenia)(WWW’21). sizeandsensitivity-controlledtermaresetassuggestedintheir
+
+KDD’24,August25–29,2024,Barcelona,Spain HaiyuanZhaoetal.
+0.1 1.0 2.0 5.0 10.0
+c
+01/102/104/106/108/1
+XAUC
+0.714 0.722 0.721 0.715 0.702
+0.720
+0.716 0.723 0.723 0.719 0.712
+0.715
+0.716 0.724 0.724 0.719 0.713
+0.712 0.722 0.722 0.717 0.710 0.710
+0.706 0.720 0.720 0.715 0.708 0.705
+0.1 1.0 2.0 5.0 10.0
+(a)watchtimeprediction
+c
+01/102/104/106/108/1
+nDCG@3
+0.475 0.493 0.494 0.490 0.484 0.495
+0.476 0.492 0.495 0.492 0.486 0.490
+0.477 0.492 0.495 0.494 0.489 0.485
+0.478 0.493 0.496 0.496 0.491
+0.480
+0.479 0.494 0.498 0.498 0.493
+0.475
+(b)relevanceranking
+Figure11:TheparametersensitivityofCWMonKuaiRand
+datasetwherethebackbonemodelisFM.
+0.10 0.08
+0.06
+0.04
+0.02
+0.000 20 40 60 80 100
+Watch Time(s)
+noitroporP
+KuaiRand (duration<100s)
+True 0.12 P CC WR M 0.10 0.08
+0.06 0.04
+0.02
+0.000 5 10 15 20 25 30
+Watch Time(s)
+(a)Duration≤100s
+noitroporP
+KuaiRand (duration=30s)
+True PCR CWM
+(b)Duration=30s
+Figure12:Thetrueandestimatedwatchtimedistribution
+onKuaiRanddataset.
+3.5 3.0
+2.5 2.0 1.5
+1.0
+0.5
+0.0 50 100 150 200
+Duration(s)
+)1e1
+×( noitroporP
+1e1 proportion of ru,v
+2.0
+1.5 1.0
+0.5
+0.0 50 100 150 200
+Duration(s)
+)1e1
+×( noitroporP
+1e1 explicit feedback proportion (when ru,v=1)
+(a)KuaiRand
+4.5
+4.0 3.5
+3.0
+2.5
+2.0 20 25 30 35 40 45 50 55 60 Duration(s)
+)2e1 ×(
+noitroporP
+6.0 1e2 explicit feedback proportion (when ru,v=1)
+5.5 5.0 4.5
+4.0 3.5
+3.0 2.5
+2.0 20 25 30 35 40 45 50 55 60 Duration(s)
+)1e1 ×(
+noitroporP
+userinterestlabelsareunobservedinreal-worlddatasets.Although
+explicitfeedbackcanreflectuserinterestandisnotaffectedby
+durationbias,itsuffersfromsevereselectionbiasandnoise[19,42,
+44]:thisindicatesthatusersmightnotprovideexplicitfeedback
+forvideostheylikeandmightmistakenlyprovideexplicitfeedback
+forvideostheydislike.Therefore,usingexplicitfeedbackasalabel
+forevaluatingrelevancerankingtasksisinappropriate.Tothisend,
+wedefineduserinterestsbasedonCWTinEq.(8).However,the
+unbiasednessofthisinterestlabelstillneedstobediscussed.
+Toachievedurationunbiased,theuserinterestindicator𝑟 𝑢,𝑣
+needstofulfilltwocharacteristics:(1)itshouldbeindependent
+ofvideoduration,and(2)when𝑟 𝑢,𝑣 = 1,userexplicitfeedback
+shouldbeequivalentacrossallvideoduration(thusmitigatingthe
+issuedescribedinFig1).Toverifywhetherourinterestindicator definedinEq.(8)satisfiestheabovecharacteristics,wecalculatethe
+proportionofuserinterestlabels𝑟 𝑢,𝑣andtheproportionofexplicit
+feedbackwhen𝑟 𝑢,𝑣 =1groupedbyvideoduration.Notethatsince
+videosshorterthan𝑤 0.7cannotachieveawatchtimeof𝑤 0.7,we
+excludethesevideosfromouranalysis.Theresultsarepresentedin
+Fig10.Itisevidentthatourdefined𝑟 𝑢,𝑣roughlysatisfiestheabove
+twocharacteristicsonboththeKuaiRandandWeChatdatasets,
+thusindicatingitsunbiasedness.
+D MOREEXPERIMENTALRESULTS
+D.1 Parametersensitivity
+Therearetwohyper-parametersintheproposedCWM:oneisthe
+userwatchcost𝑐inthecost-basedtransformfunction(Eq.(3)).The
+largerthe𝑐,themoresensitiveusersaretowatchtime;Another
+isthevarianceterm𝜎ofuserinterestincounterfactuallikelihood
+function(Eq(6)).Thelargerthevalueof𝜎,themoredispersedthe
+user’sinterestdistributionis.Fig.11illustratestheperformance
+changesofrecommendationwithdifferentvaluesof𝑐and𝜎.For
+1e1 proportion of ru,v watchtimeprediction(Fig.11(a)),thebesthyper-parameteris𝜎 ∈
+(1.0,2.0)∧𝑐 ∈ (1/40,1/20);Forrelevanceranking(Fig.11(b)),the
+besthyper-parametersis𝜎 ∈ (2.0,5.0)∧𝑐 ∈ (1/80,1/60).Notethat
+thebesthyper-parametersoftwotasksmaynotbethesame.In
+practice,itisnecessarytoadjustthehyper-parameterstomake
+(b)WeChat CWMperformbest.
+D.2 Betterfittothetruewatchtimedistribution
+Figure10:(Left)Theproportionofuserinterestlabels𝑟
+𝑢,𝑣
+and(Right)Theproportionofexplicitfeedbackwhen𝑟 𝑢,𝑣 =1 WeexaminewhetherCWMcanfitthetruewatchtimedistribution.
+Asacomparison,wealsopresenttheestimatedwatchtimedistribu-
+groupedbyvideodurationon(a)KuaiRandand(b)WeChat.
+tionbyPCR,whichisrepresentativeofexistingdebiasingmethods.
+Fig12(a)showsthetrueandestimatedwatchtimedistributionon
+paper[51].WeutilizeAdamastheoptimizerandsettheinitial
+learningrateas5𝑒−4forallmethods.Thebatchsizeissetas512.For videoswithlessthan100sdurationonKuaiRand.Wecanfindthat
+theestimatedwatchtimedistributionbyPCRismoreflattening
+allthebackbonemodels,wesettheirlatentembeddingdimension
+thanthetruedistribution.Itoverestimateshigherwatchtime(i.e.,
+to10.Forallmethodswithneuralnetworks,thehiddenunitsare
+>10s).Incontrast,ourCWMcanfitthetruedistributionevenbetter.
+setto64whilethedropoutratioissetto0.2.Thevalueofusercost
+𝑐 and𝜎 inourCWMissetto (1/40,2) intheKuaiRanddataset, Fig12(b)showsthetrueandestimatedwatchtimedistributionon
+(1/40,20)intheWeChatdataset,and(1/5,5)intheProductdataset. videoswith30sdurationonKuaiRand.ItcanbefoundthatPCR
+onlyestimatesasingle-peakeddistributionwhichdifferssignifi-
+Wetuneourhyperparametersonthevalidationsetwhileevaluating
+cantlyfromthetruebimodaldistribution.Incomparison,CWM
+theperformanceonthetestset.
+canestimateasimilarbimodaldistributiontothetruedistribution,
+C THEUNBIASEDNESSOFINTERESTLABELS demonstratingCWM’seffectivenessinwatchtimeprediction.
+Toevaluatetheperformanceofrelevancerankingtasksinthisstudy,
+weneedanunbiasedindicatorofuserinterestfirst.However,the

@@ -1,0 +1,663 @@
+Deep Interest Network for Click-Through Rate Prediction
+GuoruiZhou,ChengruSong,XiaoqiangZhu
+YingFan,HanZhu,XiaoMa,YanghuiYan,JunqiJin,HanLi,KunGai
+AlibabaGroup
+{guorui.xgr,chengru.scr,xiaoqiang.zxq,zhuhan.zh,fanying.fy,maxiao.ma,yanghui.yyh,junqi.jjq,lihan.hl,jingshi.gk}@
+alibaba-inc.com
+ABSTRACT ThesemethodsfollowasimilarEmbedding&MLPparadigm:large
+Click-through rate prediction is an essential task in industrial scalesparseinputfeaturesarefirstmappedintolowdimensional
+applications,suchasonlineadvertising.Recentlydeeplearning embeddingvectors,andthentransformedintofixed-lengthvectors
+basedmodelshavebeenproposed,whichfollowasimilarEmbed- inagroup-wisemanner,finallyconcatenatedtogethertofedinto
+ding&MLPparadigm.Inthesemethodslargescalesparseinput fullyconnectedlayers(alsoknownasmultilayerperceptron,MLP)
+featuresarefirstmappedintolowdimensionalembeddingvectors, tolearnthenonlinearrelationsamongfeatures.Comparedwith
+andthentransformedintofixed-lengthvectorsinagroup-wise commonlyusedlogisticregressionmodel[19],thesedeeplearning
+manner,finallyconcatenatedtogethertofedintoamultilayerper- methodscanreducealotoffeatureengineeringjobsandenhance
+ceptron(MLP)tolearnthenonlinearrelationsamongfeatures.In themodelcapabilitygreatly.Forsimplicity,wenamethesemethods
+thisway,userfeaturesarecompressedintoafixed-lengthrepre- Embedding&MLPinthispaper,whichnowhavebecomepopular
+sentationvector,inregardlessofwhatcandidateadsare.Theuse onCTRpredictiontask.
+offixed-lengthvectorwillbeabottleneck,whichbringsdifficulty However,theuserrepresentationvectorwithalimiteddimen-
+forEmbedding&MLPmethodstocaptureuser’sdiverseinterests sioninEmbedding&MLPmethodswillbeabottlenecktoexpress
+effectivelyfromrichhistoricalbehaviors.Inthispaper,wepropose user’sdiverseinterests.Takedisplayadvertisingine-commerce
+anovelmodel:DeepInterestNetwork(DIN)whichtacklesthischal- siteasanexample.Usersmightbeinterestedindifferentkindsof
+lengebydesigningalocalactivationunittoadaptivelylearnthe goodssimultaneouslywhenvisitingthee-commercesite.Thatis
+representationofuserinterestsfromhistoricalbehaviorswithre- tosay,userinterestsarediverse.WhenitcomestoCTRprediction
+specttoacertainad.Thisrepresentationvectorvariesoverdifferent task,userinterestsareusuallycapturedfromuserbehaviordata.
+ads,improvingtheexpressiveabilityofmodelgreatly.Besides,we Embedding&MLPmethodslearntherepresentationofallinterests
+developtwotechniques:mini-batchawareregularizationanddata foracertainuserbytransformingtheembeddingvectorsofuser
+adaptiveactivationfunctionwhichcanhelptrainingindustrialdeep behaviorsintoafixed-lengthvector,whichisinaneuclideanspace
+networkswithhundredsofmillionsofparameters.Experimentson whereallusers’representationvectorsare.Inotherwords,diverse
+twopublicdatasetsaswellasanAlibabarealproductiondataset interests of the user are compressed into a fixed-length vector,
+withover2billionsamplesdemonstratetheeffectivenessofpro- whichlimitstheexpressiveabilityofEmbedding&MLPmethods.
+posedapproaches,whichachievesuperiorperformancecompared Tomaketherepresentationcapableenoughforexpressinguser’s
+withstate-of-the-artmethods.DINnowhasbeensuccessfullyde- diverseinterests,thedimensionofthefixed-lengthvectorneedsto
+ployedintheonlinedisplayadvertisingsysteminAlibaba,serving belargelyexpanded.Unfortunately,itwilldramaticallyenlargethe
+themaintraffic. sizeoflearningparametersandaggravatetheriskofoverfitting
+underlimiteddata.Besides,itaddstheburdenofcomputationand
+CCSCONCEPTS storage,whichmaynotbetoleratedforanindustrialonlinesystem.
+Ontheotherhand,itisnotnecessarytocompressallthediverse
+•Informationsystems→Displayadvertising;Recommender
+interestsofacertainuserintothesamevectorwhenpredicting
+systems;
+acandidateadbecauseonlypartofuser’sinterestswillinfluence
+KEYWORDS his/heraction(toclickornottoclick).Forexample,afemaleswim-
+merwillclickarecommendedgogglemostlyduetothebought
+Click-ThroughRatePrediction,DisplayAdvertising,E-commerce
+ofbathingsuitratherthantheshoesinherlastweek’sshopping
+list.Motivatedbythis,weproposeanovelmodel:DeepInterest
+1 INTRODUCTION
+Network(DIN),whichadaptivelycalculatestherepresentationvec-
+In cost-per-click (CPC) advertising system, advertisements are torofuserinterestsbytakingintoconsiderationtherelevanceof
+rankedbytheeCPM(effectivecostpermille),whichistheproduct historicalbehaviorsgivenacandidatead.Byintroducingalocal
+ofthebidpriceandCTR(click-throughrate),andCTRneedstobe activationunit,DINpaysattentionstotherelateduserinterestsby
+predictedbythesystem.Hence,theperformanceofCTRprediction soft-searchingforrelevantpartsofhistoricalbehaviorsandtakesa
+modelhasadirectimpactonthefinalrevenueandplaysakeyrole weightedsumpoolingtoobtaintherepresentationofuserinterests
+intheadvertisingsystem.ModelingCTRpredictionhasreceived withrespecttothecandidatead.Behaviorswithhigherrelevance
+muchattentionfrombothresearchandindustrycommunity. tothecandidateadgethigheractivatedweightsanddominatethe
+Recently,inspiredbythesuccessofdeeplearningincomputer representationofuserinterests.Wevisualizethisphenomenonin
+vision[14]andnaturallanguageprocessing[1],deeplearningbased theexperimentsection.Inthisway,therepresentationvectorof
+methodshavebeenproposedforCTRpredictiontask[3,4,21,26].
+8102
+peS
+31
+]LM.tats[
+4v87960.6071:viXra
+
+userinterestsvariesoverdifferentads,whichimprovestheexpres- offeaturesusedinCTRmodelhavebecomelargerandlarger.In
+siveabilityofmodelunderlimiteddimensionandenablesDINto ordertobetterextractfeaturerelationstoimproveperformance,
+bettercaptureuser’sdiverseinterests. severalworkspayattentiontothedesignofmodelstructure.
+Trainingindustrialdeepnetworkswithlargescalesparsefea- Asapioneerwork,NNLM[2]learnsdistributedrepresentation
+turesisofgreatchallenge.Forexample,SGDbasedoptimization foreachword,aimingtoavoidcurseofdimensioninlanguage
+methodsonlyupdatethoseparametersofsparsefeaturesappearing modeling.Thismethod,oftenreferredtoasembedding,hasinspired
+ineachmini-batch.However,addingwithtraditionalℓ2regular- manynaturallanguagemodelsandCTRpredictionmodelsthat
+ization,thecomputationturnstobeunacceptable,whichneedsto needtohandlelarge-scalesparseinputs.
+calculateL2-normoverthewholeparameters(withsizescaling LS-PLM[9]andFM[20]modelscanbeviewedasaclassofnet-
+uptobillionsinoursituation)foreachmini-batch.Inthispaper, workswithonehiddenlayer,whichfirstemploysembeddinglayer
+wedevelopanovelmini-batchawareregularizationwhereonly onsparseinputsandthenimposesspeciallydesignedtransforma-
+parametersofnon-zerofeaturesappearingineachmini-batchpar- tionfunctionsfortargetfitting,aimingtocapturethecombination
+ticipateinthecalculationofL2-norm,makingthecomputation relationsamongfeatures.
+acceptable.Besides,wedesignadataadaptiveactivationfunction, DeepCrossing[21],Wide&DeepLearning[4]andYouTubeRec-
+whichgeneralizescommonlyusedPReLU[12]byadaptivelyadjust- ommendationCTRmodel[3]extendLS-PLMandFMbyreplacing
+ingtherectifiedpointw.r.t.distributionofinputsandisshownto thetransformationfunctionwithcomplexMLPnetwork,which
+behelpfulfortrainingindustrialnetworkswithsparsefeatures. enhances the model capability greatly. PNN[5] tries to capture
+Thecontributionsofthispaperaresummarizedasfollows: high-orderfeatureinteractionsbyinvolvingaproductlayerafter
+• Wepointoutthelimitofusingfixed-lengthvectortoexpress embeddinglayer.DeepFM[10]imposesafactorizationmachinesas
+user’s diverse interests and design a novel deep interest "wide"moduleinWide&Deep[4]withnoneedoffeatureengineer-
+network(DIN)whichintroducesalocalactivationunitto ing.Overall,thesemethodsfollowasimilarmodelstructurewith
+adaptivelylearntherepresentationofuserinterestsfrom combinationofembeddinglayer(forlearningthedenserepresen-
+historicalbehaviorsw.r.t.givenads.DINcanimprovethe tationofsparsefeatures)andMLP(forlearningthecombination
+expressiveabilityofmodelgreatlyandbettercapturethe relationsoffeaturesautomatically).ThiskindofCTRprediction
+diversitycharacteristicofuserinterests. modelreducesthemanualfeatureengineeringjobsgreatly.Our
+• Wedeveloptwonoveltechniquestohelptrainingindustrial basemodelfollowsthiskindofmodelstructure.Howeverinappli-
+deep networks: i) a mini-batch aware regularizer, which cationswithrichuserbehaviors,featuresareoftencontainedwith
+savesheavycomputationofregularizationondeepnetworks variable-lengthlistofids,e.g.,searchedtermsorwatchedvideosin
+withhugenumberofparametersandishelpfulforavoiding YouTuberecommendersystem[3].Thesemodelsoftentransform
+overfitting, ii) a data adaptive activation function, which correspondinglistofembeddingvectorsintoafixed-lengthvector
+generalizesPReLUbyconsideringthedistributionofinputs viasum/averagepooling,whichcauseslossofinformation.The
+andshowswellperformance. proposedDINtacklesitbyadaptivelylearningtherepresentation
+• WeconductextensiveexperimentsonbothpublicandAl- vectorw.r.t.givenad,improvingtheexpressiveabilityofmodel.
+ibabadatasets.Resultsverifytheeffectivenessofproposed AttentionmechanismoriginatesfromNeuralMachineTransla-
+DINandtrainingtechniques.Ourcode1 ispubliclyavail- tion(NMT)field[1].NMTtakesaweightedsumofalltheannota-
+able.Theproposedapproacheshavebeendeployedinthe tionstogetanexpectedannotationandfocusesonlyoninformation
+commercialdisplayadvertisingsysteminAlibaba,oneof relevanttothegenerationofnexttargetword.Arecentwork,Deep-
+world’slargestadvertisingplatform,contributingsignificant Intent[26]appliesattentioninthecontextofsearchadvertising.
+improvementtothebusiness. SimilartoNMT,theyuseRNN[24]tomodeltext,thenlearnone
+globalhiddenvectortohelppayingattentiononthekeywordsin
+InthispaperwefocusontheCTRpredictionmodelinginthe
+eachquery.Itisshownthattheuseofattentioncanhelpcapturing
+scenarioofdisplayadvertisingine-commerceindustry.Methods
+themainintentofqueryorad.DINdesignsalocalactivationunit
+discussedherecanbeappliedinsimilarscenarioswithrichuser
+tosoft-searchforrelevantuserbehaviorsandtakesaweightedsum
+behaviors,suchaspersonalizedrecommendationine-commerce
+poolingtoobtaintheadaptiverepresentationofuserinterestswith
+sites,feedsrankinginsocialnetworksetc.
+respecttoagivenad.Theuserrepresentationvectorvariesover
+Therestofthepaperisorganizedasfollows.Wediscussrelated
+differentads,whichisdifferentfromDeepIntentinwhichthereis
+workinsection2andintroducethebackgroundaboutcharacteristic
+nointeractionbetweenadanduser.
+ofuserbehaviordataindisplayadvertisingsystemofe-commerce
+Wemakecodepubliclyavailable,andfurthershowhowtosuc-
+siteinsection3.Section4and5describeindetailthedesignof
+cessfullydeployDINinoneoftheworld’slargestadvertisingsys-
+DINmodelaswellastwoproposedtrainingtechniques.Wepresent
+temswithnoveldevelopedtechniquesfortraininglargescaledeep
+experimentsinsection6andconcludeinsection7.
+networkswithhundredsofmillionsofparameters.
+2 RELATEDWORK
+3 BACKGROUND
+ThestructureofCTRpredictionmodelhasevolvedfromshallowto
+deep.Atthesametime,thenumberofsamplesandthedimension Ine-commercesites,suchasAlibaba,advertisementsarenatural
+goods.Intherestofthispaper,withoutspecialdeclaration,were-
+1Experiment code on two public datasets is available on GitHub:
+gardadsasgoods.Figure1brieflyillustratestherunningprocedure
+https://github.com/zhougr1993/DeepInterestNetwork
+2
+
+Table1:Statisticsoffeaturesetsusedinthedisplayadver-
+tising system in Alibaba. Features are composed of sparse
+binaryvectorsinthegroup-wisemanner.
+Category FeatureGroup Dimemsionality Type #NonzeroIdsperInstance
+gender 2 one-hot 1
+UserProfile
+age_level ∼10 one-hot 1
+Features
+... ... ... ...
+visited_goods_ids ∼109 multi-hot ∼103
+UserBehavior visited_shop_ids ∼107 multi-hot ∼103
+Features visited_cate_ids ∼104 multi-hot ∼102
+Figure1:Illustrationofrunningprocedureofdisplayadver- goods_id ∼107 one-hot 1
+tisingsysteminAlibaba,inwhichuserbehaviordataplays AdFeatures s ch ato ep __ idid ∼ ∼1 10 05 4 o on ne e- -h ho ot t 1 1
+importantroles. ... ... ... ...
+pid ∼10 one-hot 1
+ContextFeatures time ∼10 one-hot 1
+ofdisplayadvertisingsysteminAlibaba,whichconsistsoftwo ... ... ... ...
+mainstages:i)matchingstagewhichgenerateslistofcandidateads
+relevanttothevisitinguserviamethodslikecollaborativefiltering,
+ii)rankingstagewhichpredictsCTRforeachgivenadandthen fourgroupsoffeaturesareillustratedas:
+selectstoprankedones.Everyday,hundredsofmillionsofusers
+[0,0,0,0,1,0,0] [0,1] [0,..,1,...,1,...0] [0,..,1,...,0]
+visitthee-commercesite,leavinguswithlotsofuserbehaviordata (cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32) (cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32) (cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32) (cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32) (cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32) (cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)(cid:32)
+(cid:124) (cid:123)(cid:122) (cid:125) (cid:124)(cid:123)(cid:122)(cid:125) (cid:124) (cid:123)(cid:122) (cid:125) (cid:124) (cid:123)(cid:122) (cid:125)
+whichcontributescriticallyinbuildingmatchingandrankingmod- weekday=Friday gender=Femalevisited_cate_ids={Bag,Book}ad_cate_id=Book
+els.Itisworthmentioningthatuserswithrichhistoricalbehaviors
+ThewholefeaturesetusedinoursystemisdescribedinTable
+containdiverseinterests.Forexample,ayoungmotherhasbrowsed
+1.Itiscomposedoffourcategories,amongwhichuserbehavior
+goodsincludingwoolencoat,T-shits,earrings,totebag,leather
+featuresaretypicallymulti-hotencodingvectorsandcontainrich
+handbagandchildren’scoatrecently.Thesebehaviordatagiveus
+informationofuserinterests.Notethatinoursetting,thereareno
+hintsabouthershoppinginterests.Whenshevisitsthee-commerce
+combinationfeatures.Wecapturetheinteractionoffeatureswith
+site,systemdisplaysasuitableadtoher,forexampleanewhand-
+deepneuralnetwork.
+bag.Obviouslythedisplayedadonlymatchesoractivatespartof
+interestsofthismother.Insummary,interestsofuserwithrich
+4.2 BaseModel(Embedding&MLP)
+behaviorsarediverseandcouldbelocallyactivatedgivencertain
+ads.Weshowlaterinthispapermakinguseofthesecharacteristics Most of the popular model structures [3, 4, 21] share a similar
+playsimportantroleforbuildingCTRpredictionmodel. Embedding&MLPparadigm,whichwerefertoasbasemodel,as
+shownintheleftofFig.2.Itconsistsofseveralparts:
+4 DEEPINTERESTNETWORK
+Embeddinglayer. Astheinputsarehighdimensionalbinary
+Differentfromsponsoredsearch,userscomeintodisplayadver- vectors,embeddinglayerisusedtotransformthemintolowdi-
+tisingsystemwithoutexplicitlyexpressedintentions.Effectiveap- mensionaldenserepresentations.Forthei-thfeaturegroupofti,
+proachesarerequiredtoextractuserinterestsfromrichhistorical letWi = [wi,...,wi,...,wi ] ∈ RD×Ki representthei-thembed-
+behaviorswhenbuildingtheCTRpredictionmodel.Featuresthat
+dingdictiona1 ry,whj erewiKi
+∈RD isanembeddingvectorwithdi-
+depictusersandadsarethebasicelementsintheCTRmodeling j
+mensionalityofD.Embeddingoperationfollowsthetablelookup
+ofadvertisementsystem.Makinguseofthesefeaturesreasonably
+mechanism,asillustratedinFig.2.
+andmininginformationfromthemarecritical.
+• Ifti isone-hotvectorwithj-thelementti[j] = 1,theem-
+4.1 FeatureRepresentation
+bedded representation ofti is a single embedding vector
+ei =wi j.
+DatainindustrialCTRpredictiontasksismostlyinamulti-group • Ifti ismulti-hotvectorwithti[j]=1forj ∈ {i1,i2,...,i k},
+categorialform,forexample,[weekday=Friday,gender=Female,
+the embedded representation ofti is a list of embedding
+v tri asi nte sfd o_ rc mat ee d_i id ns t= o{ hB ia gg h,B -do io mk e} n,a sid o_ nc aa lte s_ pi ad r= sB eo bo ink] a, rw yh feic ah tuis ren so vrm iaa ell ny
+-
+vectors:{ei1,ei2,...eik}={w ii 1,w ii 2,...w ii k}.
+coding[4,19,21].Mathematically,encodingvectorofi-thfeature Poolinglayerand Concatlayer. Noticethatdifferentusers
+groupisformularizedasti ∈RKi.Ki denotesthedimensionalityof havedifferentnumbersofbehaviors.Thusthenumberofnon-zero
+featuregroupi,whichmeansfeaturegroupicontainsKiuniqueids. valuesformulti-hotbehavioralfeaturevectorti variesacrossin-
+ti[j]isthej-thelementofti andti[j]∈{0,1}.(cid:205)K j=i 1ti[j]=k.Vec- stances,causingthelengthsofthecorrespondinglistofembedding
+tor ti withk = 1 refers to one-hot encoding andk > 1 refers vectorstobevariable.Asfullyconnectednetworkscanonlyhandle
+to multi-hot encoding. Then one instance can be represent as fixed-lengthinputs,itisacommonpractice[3,4]totransformthe
+x = [tT,tT,...tT ]T in a group-wise manner, where M is num- listofembeddingvectorsviaapoolinglayertogetafixed-length
+1 2 M
+ber of feature groups, (cid:205) iM =1Ki = K,K is dimensionality of the vector:
+entirefeaturespace.Inthisway,theaforementionedinstancewith ei =pooling(ei1,ei2,...eik). (1)
+3
+
+Figure2:NetworkArchitecture.Theleftpartillustratesthenetworkofbasemodel(Embedding&MLP).Embeddingsofcate_id,
+shop_idandgoods_idbelongtoonegoodsareconcatenatedtorepresentonevisitedgoodsinuser’sbehaviors.Rightpartisour
+proposedDINmodel.Itintroducesalocalactivationunit,withwhichtherepresentationofuserinterestsvariesadaptively
+givendifferentcandidateads.
+Two most commonly used pooling layers are sum pooling and trainingdataandaddtheburdenofcomputationandstorage,which
+averagepooling,whichapplyelement-wisesum/averageoperations maynotbetoleratedforanindustrialonlinesystem.
+tothelistofembeddingvectors. Isthereanelegantwaytorepresentuser’sdiverseinterestsin
+Both embedding and pooling layers operate in a group-wise one vector under limited dimension? The local activation char-
+manner,mappingtheoriginalsparsefeaturesintomultiplefixed- acteristicofuserinterestsgivesusinspirationtodesignanovel
+lengthrepresentationvectors.Thenallthevectorsareconcatenated modelnameddeepinterestnetwork(DIN).Imaginewhentheyoung
+togethertoobtaintheoverallrepresentationvectorfortheinstance. mothermentionedaboveinsection3visitsthee-commercesite,
+shefindsthedisplayednewhandbagcuteandclicksit.Let’sdissect
+MLP. Giventheconcatenateddenserepresentationvector,fully
+thedrivingforceofclickaction.Thedisplayedadhitstherelated
+connectedlayersareusedtolearnthecombinationoffeaturesauto-
+interestsofthisyoungmotherbysoft-searchingherhistoricalbe-
+matically.Recentlydevelopedmethods[4,5,10]focusondesigning
+haviorsandfindingthatshehadbrowsedsimilargoodsoftotebag
+structuresofMLPforbetterinformationextraction.
+andleatherhandbagrecently.Inotherwords,behaviorsrelatedto
+Loss. Theobjectivefunctionusedinbasemodelisthenegative displayedadgreatlycontributetotheclickaction.DINsimulates
+log-likelihoodfunctiondefinedas: thisprocessbypayingattentiontotherepresentationoflocally
+activatedinterestsw.r.t.givenad.Insteadofexpressingalluser’s
+1 (cid:213)
+L=− (ylogp(x)+(1−y)log(1−p(x))), (2) diverseinterestswiththesamevector,DINadaptivelycalculate
+N
+(x,y)∈S therepresentationvectorofuserinterestsbytakingintoconsidera-
+whereS isthetrainingsetofsizeN,withx astheinputofthe tiontherelevanceofhistoricalbehaviorsw.r.t.candidatead.This
+networkandy ∈{0,1}asthelabel,p(x)istheoutputofthenetwork representationvectorvariesoverdifferentads.
+afterthesoftmaxlayer,representingthepredictedprobabilityof TherightpartofFig.2illustratesthearchitectureofDIN.Com-
+samplex beingclicked. paredwithbasemodel,DINintroducesanoveldesignedlocalacti-
+vationunitandmaintainstheotherstructuresthesame.Specifically,
+4.3 ThestructureofDeepInterestNetwork activationunitsareappliedontheuserbehaviorfeatures,which
+performsasaweightedsumpoolingtoadaptivelycalculateuser
+AmongallthosefeaturesofTable1,userbehaviorfeaturesare
+criticallyimportantandplaykeyrolesinmodelinguserinterests representationv U givenacandidateadA,asshowninEq.(3)
+inthescenarioofe-commerceapplications.
+Basemodelobtainsafixed-lengthrepresentationvectorofuser
+H H
+(cid:213) (cid:213)
+interestsbypoolingalltheembeddingvectorsovertheuserbehav- v U(A)=f(v A,e1,e2,..,eH)= a(ej,v A)ej = wjej, (3)
+iorfeaturegroup,asEq.(1).Thisrepresentationvectorstaysthe j=1 j=1
+sameforagivenuser,inregardlessofwhatcandidateadsare.In
+thisway,theuserrepresentationvectorwithalimiteddimension where{e1,e2,...,eH}isthelistofembeddingvectorsofbehaviors
+willbeabottlenecktoexpressuser’sdiverseinterests.Tomake ofuserU withlengthofH,v A istheembeddingvectorofadA.
+itcapableenough,aneasymethodistoexpandthedimensionof Inthisway,v U(A)variesoverdifferentads.a(·)isafeed-forward
+embeddingvector,whichunfortunatelywillincreasethesizeof networkwithoutputastheactivationweight,asillustratedinFig.2.
+learningparametersheavily.Itwillleadtooverfittingunderlimited Apart from the two input embedding vectors,a(·) adds the out
+4
+
+productofthemtofeedintothesubsequentnetwork,whichisan Inthispaper,weintroduceanefficientmini-batchawarereg-
+explicitknowledgetohelprelevancemodeling. ularizer,whichonlycalculatestheL2-normovertheparameters
+of sparse features appearing in each mini-batch and makes the
+LocalactivationunitofEq.(3)sharessimilarideaswithattention
+computationpossible.Infact,itistheembeddingdictionarythat
+methodswhicharedevelopedinNMTtask[1].Howeverdifferent
+contributesmostoftheparametersforCTRnetworksandarisesthe
+fromtraditionalattentionmethod,theconstraintof(cid:205) iwi =1is difficultyofheavycomputation.LetW∈RD×K denoteparameters
+relaxedinEq.(3),aimingtoreservetheintensityofuserinterests. ofthewholeembeddingdictionary,withDasthedimensionalityof
+Thatis,normalizationwithsoftmaxontheoutputofa(·)isaban- theembeddingvectorandK asthedimensionalityoffeaturespace.
+doned.Instead,valueof(cid:205) iwi istreatedasanapproximationof Expandtheℓ2regularizationonWoversamples
+t p eh ll eee c,i tin rf ot oe nnn ie cs si ut .y s Geo ir vf ’s ea nhct i ti s wv toa ot re i ccd aa nu l ds b ie e dr h ai a tn evt i ae or dre sss octs o fnt To t -a ss i ho n im r9 te 0 a%d ne dcg l pore hthe o. e nF s eo a ,r n Te d -x s1 ha 0m ir% t- L2(W)=∥W∥ 22=(cid:213) jK =1∥wj∥ 22= (x(cid:213) ,y)∈S(cid:213) jK =1I(x nj j(cid:44)0) ∥wj∥ 22, (4)
+activatesmostofthehistoricalbehaviorsbelongingtoclothesand wherewj ∈RD isthej-thembeddingvector,I(xj (cid:44)0)denotesif
+maygetlargervalueofv U (higherintensityofinterest)thanphone. theinstancex hasthefeatureidj,andnj denotesthenumberof
+Traditionalattentionmethodslosetheresolutiononthenumerical occurrenceforfeatureidjinallsamples.Eq.(4)canbetransformed
+scaleofv
+U
+bynormalizingoftheoutputofa(·). intoEq.(5)inthemini-batchawaremanner
+t frh oeW mse e tq eh u xa tev n we t hit ar ili ce hmd iaL snS unT neM dr. eBt ro u thm t eio t cd s oe h nl o su w ts re asr innh toi os it fmo gr p ri rc aoa mvl meb me ah e ra n iv nti .o NDr Lid ff Pa et tra ae sni kn t
+,
+L2(W)=(cid:213) jK =1m(cid:213)B =1(x,y(cid:213)
+)∈Bm
+I(x nj j(cid:44)0) ∥wj∥ 22, (5)
+the sequence of user historical behaviors may contain multiple whereBdenotesthenumberofmini-batches,B mdenotesthem-th
+concurrentinterests.Rapidjumpingandsuddenendingoverthese mini-batch.Letαmj =max(x,y)∈B mI(xj (cid:44)0)denoteifthereisat
+interestscausesthesequencedataofuserbehaviorstoseemtobe leastoneinstancehavingthefeatureidjinmini-batchB m.Then
+noisy.Apossibledirectionistodesignspecialstructurestomodel Eq.(5)canbeapproximatedby
+s 5uch Td Rata Ain INa Is Neq Guen Tc Ee Cwa Hy. NW Ie Qle Uav Ee Sitforfutureresearch. L2(W)≈(cid:213) jK =1m(cid:213)B =1α nm jj ∥wj∥ 22. (6)
+IntheadvertisingsysteminAlibaba,numbersofgoodsandusers Inthisway,wederiveanapproximatedmini-batchawareversion
+scaleuptohundredsofmillions.Practically,trainingindustrial
+ofℓ2regularization.Forthem-thmini-batch,thegradientw.r.t.the
+embeddingweightsoffeaturejis
+deepnetworkswithlargescalesparseinputfeaturesisofgreat
+wch ha il cl hen ag re e. pIn rot vh ei nss te oc bti eon h, ew lpe fui ln it nro pd ru ac ce tictw e.oimportanttechniques
+wj
+←wj−η 
+
+
+
+|B1
+m|
+(x,y(cid:213)
+)∈Bm
+∂L(p ∂( wx j),y) +λα nm jj wj 
+
+
+
+, (7)
+5.1 Mini-batchAwareRegularization inwhichonlyparametersoffeaturesappearinginm-thmini-batch
+participateinthecomputationofregularization.
+Overfittingisacriticalchallengefortrainingindustrialnetworks.
+Forexample,withadditionoffine-grainedfeatures,suchasfea-
+5.2 DataAdaptiveActivationFunction
+tures of goods_ids with dimensionality of 0.6 billion (including
+visited_дoods_ids ofuserandдoods_id ofadasdescribedinTa- PReLU[12]isacommonlyusedactivationfunction
+ble1),modelperformancefallsrapidlyafterthefirstepochduring (cid:40)
+s ifs >0
+trainingwithoutregularization,asthedarkgreenlineshownin f(s)= = p(s)·s+(1−p(s))·αs, (8)
+αs ifs ≤0.
+Fig.4inlatersection6.5.Itisnotpracticaltodirectlyapplytradi-
+tionalregularizationmethods,suchasℓ2andℓ1regularization,on wheresisonedimensionoftheinputofactivationfunctionf(·)
+trainingnetworkswithsparseinputsandhundredsofmillionsof andp(s)=I(s >0)isanindicatorfunctionwhichcontrolsf(s)to
+parameters.Takeℓ2regularizationasanexample.Onlyparameters switchbetweentwochannelsof f(s)=s and f(s)=αs.α inthe
+ofnon-zerosparsefeaturesappearingineachmini-batchneeds secondchannelisalearningparameter.Herewerefertop(s)asthe
+tobeupdatedinthescenarioofSGDbasedoptimizationmethods controlfunction.TheleftpartofFig.3plotsthecontrolfunctionof
+withoutregularization.However,whenaddingℓ2 regularization PReLU.PReLUtakesahardrectifiedpointwithvalueof0,which
+itneedstocalculateL2-normoverthewholeparametersforeach maybenotsuitablewhentheinputsofeachlayerfollowdifferent
+mini-batch,whichleadstoextremelyheavycomputationsandis distributions.Takethisintoconsideration,wedesignanoveldata
+unacceptablewithparametersscalinguptohundredsofmillions. adaptiveactivationfunctionnamedDice,
+1
+f(s)=p(s)·s+(1−p(s))·αs, p(s)= (9)
+p(s) p(s) −√s−E[s]
+1+e Var[s]+ϵ
+1 1 withthecontrolfunctiontobeplottedintherightpartofFig.3.
+0.5
+Inthetrainingphrase,E[s]andVar[s]isthemeanandvariance
+0 s 0 E(s) s ofinputineachmini-batch.Inthetestingphrase,E[s]andVar[s]
+PReLU Dice iscalculatedbymovingaveragesE[s]andVar[s]overdata.ϵisa
+smallconstantwhichissettobe10−8inourpractice.
+Figure3:ControlfunctionofPReLUandDice.
+5
+
+DicecanbeviewedasageneralizationofPReLu.Thekeyidea Table2:Statisticsofdatasetsusedinthispaper.
+ofDiceistoadaptivelyadjusttherectifiedpointaccordingtodis-
+tributionofinputdata,whosevalueissettobethemeanofinput. Dataset Users Goodsa Categories Samples
+Besides,Dicecontrolssmoothlytoswitchbetweenthetwochannels.
+Amazon(Electro). 192,403 63,001 801 1,689,188
+WhenE(s)=0andVar[s]=0,DicedegeneratesintoPReLU.
+MovieLens. 138,493 27,278 21 20,000,263
+Alibaba. 60million 0.6billion 100,000 2.14billion
+6 EXPERIMENTS
+aForMovieLensdataset,goodsrefertobemovies.
+In this section, we present our experiments in detail, including
+datasets,evaluationmetric,experimentalsetup,modelcomparison
+andthecorrespondinganalysis.Experimentsontwopublicdatasets applyexponentialdecay,inwhichlearningratestartsat0.001and
+withuserbehaviorsaswellasadatasetcollectedfromthedisplay decayrateissetto0.9.
+advertising system in Alibaba demonstrate the effectiveness of ThestatisticsofalltheabovedatasetsisshowninTable2.Volume
+proposedapproachwhichoutperformsstate-of-the-artmethodson ofAlibabaDatasetismuchlargerthanbothAmazonandMovieLens,
+theCTRpredictiontask.Boththepublicdatasetsandexperiment whichbringsmorechallenges.
+codesaremadeavailable1.
+6.2 Competitors
+6.1 DatasetsandExperimentalSetup • LR[19].Logisticregression(LR)isawidelyusedshallow
+AmazonDataset2.AmazonDatasetcontainsproductreviewsand modelbeforedeepnetworksforCTRpredictiontask.We
+implementitasaweakbaseline.
+metadatafromAmazon,whichisusedasbenchmarkdataset[13,
+• BaseModel.Asintroducedinsection4.2,BaseModelfollows
+18,23].WeconductexperimentsonasubsetnamedElectronics,
+theEmbedding&MLParchitectureandisthebaseofmostof
+which contains 192,403 users, 63,001 goods, 801 categories and
+subsequentlydevelopeddeepnetworksforCTRmodeling.
+1,689,188 samples. User behaviors in this dataset are rich, with
+Itactsasastrongbaselineforourmodelcomparison.
+morethan5reviewsforeachusersandgoods.Featuresinclude
+• Wide&Deep[4].Inrealindustrialapplications,Wide&Deep
+goods_id, cate_id, user reviewed goods_id_list and cate_id_list.
+modelhasbeenwidelyaccepted.Itconsistsoftwoparts:i)
+Letallbehaviorsofauserbe(b1,b2,...,b k,...,bn),thetaskisto
+wide model, which handles the manually designed cross
+predictthe(k+1)-threviewedgoodsbymakinguseofthefirstk
+reviewedgoods.Trainingdatasetisgeneratedwithk =1,2,...,n− productfeatures,ii)deepmodel,whichautomaticallyex-
+tractsnonlinearrelationsamongfeaturesandequalstothe
+2foreachuser.Inthetestset,wepredictthelastonegiventhefirst
+n−1reviewedgoods.Forallmodels,weuseSGDastheoptimizer BaseModel.Wide&Deepneedsexpertisefeatureengineering
+ontheinputofthe"wide"module.Wefollowthepracticein
+withexponentialdecay,inwhichlearningratestartsat1anddecay
+[10]totakecross-productofuserbehaviorsandcandidates
+rateissetto0.1.Themini-batchsizeissettobe32.
+MovieLensDataset3.MovieLensdata[11]contains138,493users, aswideinputs.Forexample,inMovieLensdataset,itrefersto
+thecross-productofuserratedmoviesandcandidatemovies.
+27,278movies,21categoriesand20,000,263samples.Tomakeit
+• PNN[5]. PNN can be viewed as an improved version of
+suitableforCTRpredictiontask,wetransformitintoabinaryclas-
+BaseModelbyintroducingaproductlayerafterembedding
+sificationdata.Originaluserratingofthemoviesiscontinuous
+layertocapturehigh-orderfeatureinteractions.
+valuerangingfrom0to5.Welabelthesampleswithratingof4
+• DeepFM[10].Itimposesafactorizationmachinesas"wide"
+and5tobepositiveandtheresttobenegative.Wesegmentthe
+moduleinWide&Deepsavingfeatureengineeringjobs.
+dataintotrainingandtestingdatasetbasedonuserID.Amongall
+138,493users,ofwhich100,000arerandomlyselectedintotraining
+6.3 Metrics
+set(about14,470,000samples)andtherest38,493intothetestset
+(about5,530,000samples).Thetaskistopredictwhetheruserwill InCTRpredictionfield,AUCisawidelyusedmetric[8].Itmeasures
+thegoodnessoforderbyrankingalltheadswithpredictedCTR,
+rateagivenmovietobeabove3(positivelabel)basedonhistori-
+includingintra-userandinter-userorders.Anvariationofuser
+calbehaviors.Featuresincludemovie_id,movie_cate_idanduser
+weightedAUCisintroducedin[7,13]whichmeasuresthegoodness
+ratedmovie_id_list,movie_cate_id_list.Weusethesameoptimizer,
+ofintra-userorderbyaveragingAUCoverusersandisshowntobe
+learningrateandmini-batchsizeasdescribedonAmazonDataset.
+morerelevanttoonlineperformanceindisplayadvertisingsystem.
+AlibabaDataset.Wecollectedtrafficlogsfromtheonlinedis- Weadaptthismetricinourexperiments.Forsimplicity,westill
+playadvertisingsysteminAlibaba,ofwhichtwoweeks’samples referitasAUC.Itiscalculatedasfollows:
+Tar he eu ss ize ed of fo tr ratr inai in ni gn ag na dn td ess ta inm gp sl ee ts io sf abth oe utfo 2ll bo ilw lii on ng sd anay d0fo .1r 4t bes ilt li in og n. AUC= (cid:205)n i=1 (cid:205)#
+n
+ii =m 1p #ir mes ps ri eo sn si io× nA iUCi , (10)
+respectively.Forallthedeepmodels,thedimensionalityofembed-
+wherenisthenumberofusers,#impressioni andAUCi arethe
+dingvectoris12forthewhole16groupsoffeatures.LayersofMLP
+numberofimpressionsandAUCcorrespondingtothei-thuser.
+issetby192×200×80×2.Duetothehugesizeofdata,wesetthe
+Besides,wefollow[25]tointroduceRelaImprmetrictomeasure
+mini-batchsizetobe5000anduseAdam[15]astheoptimizer.We
+relativeimprovementovermodels.Forarandomguesser,thevalue
+ofAUCis0.5.HenceRelaImprisdefinedasbelow:
+2http://jmcauley.ucsd.edu/data/amazon/ (cid:18)AUC(measuredmodel)−0.5 (cid:19)
+3https://grouplens.org/datasets/movielens/20m/ RelaImpr = AUC(basemodel)−0.5 −1 ×100%. (11)
+6
+
+Figure4:PerformancesofBaseModelwithdifferentregularizationsonAlibabaDataset.Trainingwithfine-grainedдoods_ids
+featureswithoutregularizationencountersseriousoverfittingafterthefirstepoch.Alltheregularizationsshowimprovement,
+amongwhichourproposedmini-batchawareregularizationperformsbest.Besides,welltrainedmodelwithдoods_idsfeatures
+getshigherAUCthanwithoutthem.Itcomesfromthericherinformationthatfine-grainedfeaturescontained.
+Table 3: Model Coparison on Amazon Dataset and Movie- Table 4: Best AUCs of BaseModel with different regular-
+LensDataset.AllthelinescalculateRelaImprbycomparing izationsonAlibabaDatasetcorrespondingtoFig.4.Allthe
+withBaseModeloneachdatasetrespectively. otherlinescalculateRelaImprbycomparingwithfirstline.
+MovieLens. Amazon(Electro). Regularization AUC RelaImpr
+Model
+AUC RelaImpr AUC RelaImpr
+Withoutgoods_idsfeatureandReg. 0.5940 0.00%
+LR 0.7263 -1.61% 0.7742 -24.34% Withgoods_idsfeaturewithoutReg. 0.5959 2.02%
+BaseModel 0.7300 0.00% 0.8624 0.00% Withgoods_idsfeatureandDropoutReg. 0.5970 3.19%
+Withgoods_idsfeatureandFilterReg. 0.5983 4.57%
+Wide&Deep 0.7304 0.17% 0.8637 0.36%
+Withgoods_idsfeatureandDifactoReg. 0.5954 1.49%
+PNN 0.7321 0.91% 0.8679 1.52%
+Withgoods_idsfeatureandMBA.Reg. 0.6031 9.68%
+DeepFM 0.7324 1.04% 0.8683 1.63%
+DIN 0.7337 1.61% 0.8818 5.35%
+DINwithDicea 0.7348 2.09% 0.8871 6.82% 6.5 Performanceofregularization
+aOtherlinesexceptLRusePReLUasactivationfunction. AsthedimensionoffeaturesinbothAmazonDatasetandMovie-
+LensDatasetisnothigh(about0.1million),allthedeepmodels
+includingourproposedDINdonotmeetgraveproblemofoverfit-
+ting.However,whenitcomestotheAlibabadatasetfromtheonline
+advertisingsystemwhichcontainshigherdimensionalsparsefea-
+6.4 ResultfrommodelcomparisononAmazon tures,overfittingturnstobeabigchallenge.Forexample,when
+DatasetandMovieLensDataset trainingdeepmodelswithfine-grainedfeatures(e.g.,featuresof
+дoods_idswithdimensionof0.6billioninTable1),seriousoverfit-
+Table3showstheresultsonAmazondatasetandMovieLensdataset.
+tingoccursafterthefirstepochwithoutanyregularization,which
+Allexperimentsarerepeated5timesandaveragedresultsarere-
+causesthemodelperformancetodroprapidly,asthedarkgreenline
+ported.TheinfluenceofrandominitializationonAUCislessthan
+showninFig.4.Forthisreason,weconductcarefulexperimentsto
+0.0002.Obviously,allthedeepnetworksbeatLRmodelsignificantly,
+checktheperformanceofseveralcommonlyusedregularizations.
+whichindeeddemonstratesthepowerofdeeplearning.PNNand
+DeepFMwithspeciallydesignedstructurespreformbetterthan • Dropout[22].Randomlydiscard50%offeatureidsineach
+Wide&Deep.DINperformsbestamongallthecompetitors.Espe- sample.
+ciallyonAmazonDatasetwithrichuserbehaviors,DINstandsout • Filter.Filtervisitedдoods_id byoccurrencefrequencyin
+significantly.Weowethistothedesignoflocalactivationunitstruc- samplesandleaveonlythemostfrequentones.Inoursetting,
+tureinDIN.DINpaysattentionstothelocallyrelateduserinterests top20millionдoods_idsareleft.
+bysoft-searchingforpartsofuserbehaviorsthatarerelevanttocan- • RegularizationinDiFacto[16].Parametersassociatedwith
+didatead.Withthismechanism,DINobtainsanadaptivelyvarying frequentfeaturesarelessover-regularized.
+representationofuserinterests,greatlyimprovingtheexpressive • MBA.OurproposedMini-BatchAwareregularizationmethod
+abilityofmodelcomparedwithotherdeepnetworks.Besides,DIN (Eq.4).RegularizationparameterλforbothDiFactoandMBA
+withDicebringsfurtherimprovementoverDIN,whichverifies issearchedandsettobe0.01.
+theeffectivenessoftheproposeddataadaptiveactivationfunction Fig.4andTable4givethecomparisonresults.Focusingonthe
+Dice. detailofFig.4,modeltrainedwithfine-grainedдoods_idsfeatures
+7
+
+bringslargeimprovementonthetestAUCperformanceinthefirst Table 5: Model Comparison on Alibaba Dataset with full
+epoch,comparedwithoutit.However,overfittingoccursrapidly featuresets.AllthelinescalculateRelaImprbycomparing
+in the case of training without regularization (dark green line). withBaseModel.DINsignificantlyoutperformsalltheother
+Dropoutpreventsquickoverfittingbutcausesslowerconvergence. competitors.Besides,trainingDINwithourproposedmini-
+Frequencyfilterrelievesoverfittingtoadegree.Regularizationin batchawareregularizerandDiceactivationfunctionbrings
+DiFactosetsagreaterpenaltyonдoods_id withhighfrequency, furtherimprovements.
+whichperformsworsethanfrequencyfilter.Ourproposedmini-
+batchaware(MBA)regularizationperformsbestcomparedwithall Model AUC RelaImpr
+theothermethods,whichpreventsoverfittingsignificantly.
+LR 0.5738 -23.92%
+Besides,welltrainedmodelswithдoods_idsfeaturesshowbetter
+BaseModela,b 0.5970 0.00%
+AUCperformancethanwithoutthem.Thisisduotothericher Wide&Deepa,b 0.5977 0.72%
+informationthatfine-grainedfeaturescontained.Consideringthis, PNNa,b 0.5983 1.34%
+althoughfrequencyfilterperformsslightlybetterthandropout, DeepFMa,b 0.5993 2.37%
+itthrowsawaymostoflowfrequentidsandmayloseroomfor DINModela,b 0.6029 6.08%
+modelstomakebetteruseoffine-grainedfeatures. DINwithMBAReg.a 0.6060 9.28%
+DINwithDiceb 0.6044 7.63%
+6.6 ResultfrommodelcomparisononAlibaba DINwithMBAReg.andDice 0.6083 11.65%
+Dataset aTheselinesaretrainedwithPReLUastheactivationfunction.
+Table5showstheexperimentalresultsonAlibabadatasetwithfull
+bTheselinesaretrainedwithdropoutregularization.
+featuresetsasshowninTable1.Asexpected,LRisproventobe
+muchweakerthandeepmodels.Makingcomparisonsamongdeep
+Itisworthmentioningthatonlineservingofindustrialdeep
+models,wereportseveralconclusions.First,underthesameactiva-
+networksisnotaneasyjobwithhundredsofmillionsofusersvis-
+tionfunctionandregularization,DINitselfhasachievedsuperior
+itingoursystemeveryday.Evenworse,attrafficpeakoursystem
+performancecomparedwithalltheotherdeepnetworksincluding
+servesmorethan1millionuserspersecond.Itisrequiredtomake
+BaseModel,Wide&Deep,PNNandDeepFM.DINachieves0.0059
+realtimeCTRpredictionswithhighthroughputandlowlatency.
+absoluteAUCgainand6.08%RelaImproverBaseModel.Itvalidates
+Forexample,inourrealsystemweneedtopredicthundredsof
+againtheusefuldesignoflocalactivationunitstructure.Second,
+adsforeachvisitorinlessthan10milliseconds.Inourpractice,
+ablation study based on DIN demonstrates the effectiveness of
+severalimportanttechniquesaredeployedforacceleratingonline
+ourproposedtrainingtechniques.TrainingDINwithmini-batch
+serving of industrial deep networks under the CPU-GPU archi-
+awareregularizerbringsadditional0.0031absoluteAUCgainover
+tecture:i)requestbatchingwhichmergesadjacentrequestsfrom
+dropout.Besides,DINwithDicebringsadditional0.0015absolute
+CPUtotakeadvantageofGPUpower,ii)GPUmemoryoptimization
+AUCgainoverPReLU.
+whichimprovestheaccesspatterntoreducewastedtransactions
+Takentogether,DINwithMBAregularizationandDiceachieves
+inGPUmemory,iii)concurrentkernelcomputationwhichallows
+total11.65%RelaImprand0.0113absoluteAUCgainoverBase-
+executionofmatrixcomputationstobeprocessedwithmultiple
+Model.EvencomparedwithcompetitorDeepFMwhichperforms
+CUDAkernelsconcurrently.Inall,optimizationofthesetechniques
+bestonthisdataset,DINstillachieves0.009absoluteAUCgain.It
+doublestheQPS(QueryPerSecond)capacityofasinglemachine
+isnotablethatincommercialadvertisingsystemswithhundreds
+practically.OnlineservingofDINalsobenefitsfromthis.
+ofmillionsoftraffics,0.001absoluteAUCgainissignificantand
+worthyofmodeldeploymentempirically.DINshowsgreatsuperi- 6.8 VisualizationofDIN
+oritytobetterunderstandandmakeuseofthecharacteristicsof
+FinallyweconductcasestudytorevealtheinnerstructureofDIN
+userbehaviordata.Besides,thetwoproposedtechniquesfurther
+onAlibabadataset.Wefirstexaminetheeffectivenessoflocalactiva-
+improvemodelperformanceandprovidepowerfulhelpfortraining
+tionunit.Fig.5illustratestheactivationintensityofuserbehaviors
+largescaleindustrialdeepnetworks.
+withrespecttoacandidatead.Asexpected,behaviorswithhigh
+relevancetocandidateadareweightedhigh.
+6.7 ResultfromonlineA/Btesting
+Wethenvisualizethelearnedembeddingvectors.Takingthe
+Careful online A/B testing in the display advertising system in
+youngmothermentionedbeforeasexample,werandomlyselect
+Alibabawasconductedfrom2017-05to2017-06.Duringalmosta
+9categories(dress,sportshoes,bags,etc)and100goodsofeach
+month’stesting,DINtrainedwiththeproposedregularizerandacti-
+categoryasthecandidateadsforher.Fig.6showsthevisualization
+vationfunctioncontributesupto10.0%CTRand3.8%RPM(Revenue
+ofembeddingvectorsofgoodswitht-SNE[17]learnedbyDIN,in
+PerMille)promotion4comparedwiththeintroducedBaseModel,
+whichpointswithsameshapecorrespondtothesamecategory.We
+thelastversionofouronline-servingmodel.Thisisasignificant
+canseethatgoodswithsamecategoryalmostbelongtoonecluster,
+improvementanddemonstratestheeffectivenessofourproposed
+whichshowstheclusteringpropertyofDINembeddingsclearly.
+approaches.NowDINhasbeendeployedonlineandservesthe
+Besides,wecolorthepointsthatrepresentcandidateadsbythe
+maintraffic.
+predictionvalue.Fig.6isalsoaheatmapofthismother’sinterest
+4Inourrealadvertisingsystem,adsarerankedbyCTRα ·bid-pricewithα >1.0, densitydistributionforpotentialcandidatesinembeddingspace.It
+whichcontrolsthebalanceofpromotionofCTRandRPM. showsDINcanformamultimodalinterestdensitydistributionin
+8
+
+[4] ChengH.etal.2016.Wide&deeplearningforrecommendersystems.InPro-
+ceedingsofthe1stWorkshoponDeepLearningforRecommenderSystems.ACM.
+[5] QuY.etal.2016.Product-BasedNeuralNetworksforUserResponsePrediction.
+InProceedingsofthe16thInternationalConferenceonDataMining.
+[6] WangH.etal.2018.DKN:DeepKnowledge-AwareNetworkforNewsRecom-
+mendation.InProceedingsof26thInternationalWorldWideWebConference.
+[7] ZhuH.etal.2017.OptimizedCostperClickinTaobaoDisplayAdvertising.In
+Proceedingsofthe23rdInternationalConferenceonKnowledgeDiscoveryandData
+Mining.ACM,2191–2200.
+[8] TomFawcett.2006.AnintroductiontoROCanalysis.Patternrecognitionletters
+27,8(2006),861–874.
+Figure5:IllustrationofadaptiveactivationinDIN.Behav- [9] KunGai,XiaoqiangZhu,etal.2017.LearningPiece-wiseLinearModelsfrom
+LargeScaleDataforAdClickPrediction.arXivpreprintarXiv:1704.05194(2017).
+iorswithhighrelevancetocandidateadgethighactivation [10] HuifengGuo,RuimingTang,etal.2017.DeepFM:AFactorization-Machinebased
+weight. NeuralNetworkforCTRPrediction.InProceedingsofthe26thInternationalJoint
+ConferenceonArtificialIntelligence.1725–1731.
+[11] F.MaxwellHarperandJosephA.Konstan.2015.TheMovieLensDatasets:History
+andContext.ACMTransactionsonInteractiveIntelligentSystems5,4(2015).
+[12] KaimingHe,XiangyuZhang,ShaoqingRen,andJianSun.2015.Delvingdeepinto
+rectifiers:Surpassinghuman-levelperformanceonimagenetclassification.In
+ProceedingsoftheIEEEInternationalConferenceonComputerVision.1026–1034.
+[13] RuiningHeandJulianMcAuley.2016. UpsandDowns:ModelingtheVi-
+sualEvolutionofFashionTrendswithOne-ClassCollaborativeFiltering.In
+Proceedingsofthe25thInternationalConferenceonWorldWideWeb.507–517.
+https://doi.org/10.1145/2872427.2883037
+[14] GaoHuang,ZhuangLiu,LaurensvanderMaaten,andKilianQ.Weinberger.
+Denselyconnectedconvolutionalnetworks.
+[15] DiederikKingmaandJimmyBa.2015.Adam:AMethodforStochasticOptimiza-
+tion.InProceedingsofthe3rdInternationalConferenceonLearningRepresentations.
+[16] MuLi,ZiqiLiu,AlexanderJSmola,andYu-XiangWang.2016. DiFacto:Dis-
+tributedfactorizationmachines.InProceedingsofthe9thACMInternational
+ConferenceonWebSearchandDataMining.377–386.
+[17] LaurensvanderMaatenandGeoffreyHinton.2008.Visualizingdatausingt-SNE.
+JournalofMachineLearningResearch9,Nov(2008),2579–2605.
+[18] JulianMcauley,ChristopherTargett,QinfengShi,andVanDenHengelAnton.
+Image-BasedRecommendationsonStylesandSubstitutes.InProceedingsofthe
+38thInternationalACMSIGIRConferenceonResearchandDevelopmentinInfor-
+mationRetrieval.43–52.
+Figure 6: Visualization of embeddings of goods in DIN.
+[19] H.BrendanMcmahan,H.BrendanHolt,etal.2014. AdClickPrediction:a
+Shapeofpointsrepresentscategoryofgoods.Colorofpoints ViewfromtheTrenches.InProceedingsofthe19thACMSIGKDDInternational
+correspondstoCTRpredictionvalue. ConferenceonKnowledgeDiscoveryandDataMining.1222–1230.
+[20] SteffenRendle.2010.Factorizationmachines.InProceedingsofthe10thInterna-
+tionalConferenceonDataMining.IEEE,995–1000.
+[21] YingShan,TRyanHoens,JianJiao,HaijingWang,DongYu,andJCMao.Deep
+Crossing:Web-scalemodelingwithoutmanuallycraftedcombinatorialfeatures.
+candidates’embeddingspaceforacertainusertocapturehis/her
+[22] NitishSrivastava,GeoffreyEHinton,AlexKrizhevsky,IlyaSutskever,andRuslan
+diverseinterests. Salakhutdinov.2014.Dropout:asimplewaytopreventneuralnetworksfrom
+overfitting.JournalofMachineLearningResearch15,1(2014),1929–1958.
+[23] AndreasVeit,BalazsKovacs,etal.2015.LearningVisualClothingStyleWith
+7 CONCLUSIONS
+HeterogeneousDyadicCo-Occurrences.InProceedingsoftheIEEEInternational
+ConferenceonComputerVision.
+Inthispaper,wefocusonthetaskofCTRpredictionmodelingin
+[24] RonaldJWilliamsandDavidZipser.1989.Alearningalgorithmforcontinually
+thescenarioofdisplayadvertisingine-commerceindustrywith runningfullyrecurrentneuralnetworks.Neuralcomputation(1989),270–280.
+rich user behavior data. The use of fixed-length representation [25] LingYan,Wu-junLi,Gui-RongXue,andDingyiHan.2014.Coupledgrouplasso
+forweb-scalectrpredictionindisplayadvertising.InProceedingsofthe31th
+intraditionaldeepCTRmodelsisabottleneckforcapturingthe
+InternationalConferenceonMachineLearning.802–810.
+diversity of user interests. To improve the expressive ability of [26] ShuangfeiZhai,Keng-haoChang,RuofeiZhang,andZhongfeiMarkZhang.2016.
+model,anovelapproachnamedDINisdesignedtoactivaterelated Deepintent:Learningattentionsforonlineadvertisingwithrecurrentneural
+networks.InProceedingsofthe22ndACMSIGKDDInternationalConferenceon
+userbehaviorsandobtainanadaptiverepresentationvectorfor KnowledgeDiscoveryandDataMining.ACM,1295–1304.
+userinterestswhichvariesoverdifferentads.Besidestwonovel [27] SongJetal.ZhouC,BaiJ.2018.ATRank:AnAttention-BasedUserBehaviorMod-
+elingFrameworkforRecommendation.InProceedingsof32thAAAIConference
+techniquesareintroducedtohelptrainingindustrialdeepnetworks
+onArtificialIntelligence.
+andfurtherimprovetheperformanceofDIN.Theycanbeeasily
+generalizedtootherindustrialdeeplearningtasks.DINnowhas
+beendeployedintheonlinedisplayadvertisingsysteminAlibaba.
+REFERENCES
+[1] DzmitryBahdanau,KyunghyunCho,andYoshuaBengio.2015.NeuralMachine
+TranslationbyJointlyLearningtoAlignandTranslate.InProceedingsofthe3rd
+InternationalConferenceonLearningRepresentations.
+[2] DucharmeRéjeanBengioYoshuaetal.2003. Aneuralprobabilisticlanguage
+model.JournalofMachineLearningResearch(2003),1137–1155.
+[3] PaulCovington,JayAdams,andEmreSargin.2016. Deepneuralnetworks
+foryoutuberecommendations.InProceedingsofthe10thACMConferenceon
+RecommenderSystems.ACM,191–198.
+9

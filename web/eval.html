@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>评测报告 · 长视频推荐 Demo</title>
+<style>
+  :root {
+    --bg: #0e0e10; --bg-panel: #17171a; --border: #2a2a30;
+    --border-soft: #222227; --text: #ececec; --text-dim: #9a9aa2;
+    --text-faint: #6b6b74; --accent: #e50914; --good: #4ade80;
+    --warn: #f4b04a; --ai: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 34px 40px 70px; max-width: 980px; margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  h1 .dot {
+    display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+    background: linear-gradient(135deg, var(--accent), #ff5a4a);
+    margin-right: 10px; transform: translateY(-1px);
+  }
+  .protocol { font-size: 13px; color: var(--text-faint); margin-bottom: 30px;
+              line-height: 1.7; }
+  .back {
+    position: absolute; top: 34px; right: 40px; text-decoration: none;
+    font-size: 13px; color: var(--text-dim);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 13px;
+  }
+  .back:hover { color: var(--text); border-color: #5a5a66; }
+  h2 {
+    font-size: 15px; font-weight: 700; margin: 30px 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2::before {
+    content: ""; width: 4px; height: 16px; border-radius: 2px;
+    background: linear-gradient(180deg, var(--accent), #ff6a4a);
+  }
+  .card-box {
+    background: var(--bg-panel); border: 1px solid var(--border-soft);
+    border-radius: 12px; padding: 6px 18px;
+  }
+  .frow {
+    display: grid; grid-template-columns: 240px 92px 1fr 26%;
+    gap: 14px; align-items: center; padding: 9px 0;
+    border-bottom: 1px solid var(--border-soft); font-size: 13px;
+  }
+  .frow:last-child { border-bottom: none; }
+  .frow .stage { color: var(--text); }
+  .frow.channel .stage { color: var(--text-dim); padding-left: 14px; font-size: 12.5px; }
+  .frow .hr { color: var(--good); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .frow .bar { height: 9px; border-radius: 5px; background: #26262c; overflow: hidden; }
+  .frow .bar i {
+    display: block; height: 100%; border-radius: 5px;
+    background: linear-gradient(90deg, #2f9e5e, var(--good));
+    transition: width .8s ease;
+  }
+  .frow.channel .bar i { background: linear-gradient(90deg, #3a6ea8, #6aa4e0); opacity: .75; }
+  .frow .note { color: var(--text-faint); font-size: 11.5px; line-height: 1.45; }
+  .headline {
+    margin: 18px 2px 0; font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .headline .big {
+    background: rgba(74, 222, 128, .1); color: var(--good);
+    border-radius: 10px; padding: 8px 16px; font-weight: 700;
+  }
+  .brow {
+    display: grid; grid-template-columns: 200px 1fr 150px;
+    gap: 14px; align-items: center; padding: 10px 0;
+    border-bottom: 1px solid var(--border-soft); font-size: 13px;
+  }
+  .brow:last-child { border-bottom: none; }
+  .brow .metric b { display: block; font-size: 13px; }
+  .brow .metric span { font-size: 11px; color: var(--text-faint); }
+  .pair { display: flex; flex-direction: column; gap: 5px; }
+  .pair .l { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+  .pair .l em { width: 76px; font-style: normal; color: var(--text-dim); }
+  .pair .l b { min-width: 46px; font-variant-numeric: tabular-nums; }
+  .pair .track { flex: 1; height: 8px; border-radius: 4px; background: #26262c; overflow: hidden; }
+  .pair .track i { display: block; height: 100%; border-radius: 4px; }
+  .pair .full i { background: linear-gradient(90deg, #b3323c, #ff6a5a); }
+  .pair .hot i { background: #4a4a55; }
+  .notes { font-size: 12.5px; color: var(--text-dim); line-height: 1.85; }
+  .notes li { margin-bottom: 4px; }
+  .loading { color: var(--text-faint); padding: 60px 0; text-align: center; font-size: 14px; }
+  .err { color: var(--warn); padding: 40px 0; text-align: center; font-size: 14px; line-height: 1.8; }
+  @media (max-width: 760px) {
+    body { padding: 22px 18px 60px; }
+    .frow { grid-template-columns: 150px 70px 1fr; }
+    .frow .note { display: none; }
+    .brow { grid-template-columns: 140px 1fr; }
+    .brow .val { display: none; }
+  }
+</style>
+</head>
+<body>
+<a class="back" href="/">← 返回演示</a>
+<h1><span class="dot"></span>离线评测报告</h1>
+<div class="protocol" id="protocol">加载中…</div>
+<div id="content" class="loading">正在加载评测数据…</div>
+
+<script>
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = x => (typeof x === 'number' ? x.toFixed(4) : x);
+
+async function load() {
+  let d;
+  try {
+    d = await (await fetch('/api/eval')).json();
+  } catch (e) {
+    document.getElementById('content').className = 'err';
+    document.getElementById('content').textContent =
+      '评测数据未生成：请先运行 python scripts/eval.py';
+    return;
+  }
+  document.getElementById('protocol').innerHTML =
+    `协议：${esc(d.protocol)}；抽样 <b>${d.n_users}</b> 个测试用户`;
+
+  const maxHr = Math.max(...d.funnel.map(f => f.hr10), 1e-9);
+  const funnel = d.funnel.map(f => `
+    <div class="frow${f.channel ? ' channel' : ''}">
+      <div class="stage">${esc(f.stage)}</div>
+      <div class="hr">${f.hr10.toFixed(4)}</div>
+      <div class="bar"><i style="width:${(f.hr10 / maxHr * 100).toFixed(1)}%"></i></div>
+      <div class="note">${esc(f.note)}</div>
+    </div>`).join('');
+
+  const beyond = d.beyond.map(b => {
+    const m = Math.max(Math.abs(b.full), Math.abs(b.hot), 1e-9);
+    const wf = Math.abs(b.full) / m * 100, wh = Math.abs(b.hot) / m * 100;
+    return `
+    <div class="brow">
+      <div class="metric"><b>${esc(b.metric)}</b><span>${esc(b.desc)}</span></div>
+      <div class="pair">
+        <div class="l full"><em>完整链路</em><div class="track"><i style="width:${wf.toFixed(1)}%"></i></div><b>${fmt(b.full)}</b></div>
+        <div class="l hot"><em>纯热门</em><div class="track"><i style="width:${wh.toFixed(1)}%"></i></div><b>${fmt(b.hot)}</b></div>
+      </div>
+      <div class="val"></div>
+    </div>`; }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <h2>准确性：漏斗逐级（HR@10）</h2>
+    <div class="card-box">${funnel}</div>
+    <div class="headline">
+      <span class="big">NDCG@10 = ${d.ndcg10.toFixed(4)}</span>
+      <span class="big">最终链路 = 纯热门基线的 ${d.final_vs_hot}×</span>
+    </div>
+    <h2>Beyond-accuracy（完整链路 vs 纯热门）</h2>
+    <div class="card-box">${beyond}</div>
+    <h2>备注</h2>
+    <ul class="notes">${d.notes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+}
+load();
+</script>
+</body>
+</html>

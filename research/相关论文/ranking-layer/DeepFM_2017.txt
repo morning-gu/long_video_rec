@@ -1,0 +1,530 @@
+DeepFM: A Factorization-Machine based Neural Network for CTR Prediction
+HuifengGuo∗1 ,RuimingTang2,YunmingYe†1,ZhenguoLi2,XiuqiangHe2
+1ShenzhenGraduateSchool,HarbinInstituteofTechnology,China
+2Noah’sArkResearchLab,Huawei,China
+1huifengguo@yeah.net,yeyunming@hit.edu.cn
+2{tangruiming,li.zhenguo,hexiuqiang}@huawei.com
+Abstract
+Learning sophisticated feature interactions behind
+user behaviors is critical in maximizing CTR for
+recommendersystems. Despitegreatprogress,ex-
+istingmethodsseemtohaveastrongbiastowards
+low- or high-order interactions, or require exper-
+tise feature engineering. In this paper, we show
+that it is possible to derive an end-to-end learn-
+ing model that emphasizes both low- and high-
+order feature interactions. The proposed model,
+Figure1:Wide&deeparchitectureofDeepFM.Thewideanddeep
+DeepFM,combinesthepoweroffactorizationma-
+componentsharethesameinputrawfeaturevector,whichenables
+chines for recommendation and deep learning for
+DeepFMtolearnlow-andhigh-orderfeatureinteractionssimulta-
+feature learning in a new neural network architec-
+neouslyfromtheinputrawfeatures.
+ture. Compared to the latest Wide & Deep model
+from Google, DeepFM has a shared input to its
+can be used as a signal for CTR. As a second observation,
+“wide” and “deep” parts, with no need of feature
+male teenagers like shooting games and RPG games, which
+engineering besides raw features. Comprehensive
+meansthatthe(order-3)interactionofappcategory,usergen-
+experiments are conducted to demonstrate the ef-
+derandageisanothersignalforCTR.Ingeneral,suchinter-
+fectivenessandefficiencyofDeepFMovertheex-
+actionsoffeaturesbehinduserclickbehaviorscanbehighly
+isting models for CTR prediction, on both bench-
+sophisticated,wherebothlow-andhigh-orderfeatureinterac-
+markdataandcommercialdata.
+tions should play important roles. According to the insights
+oftheWide&Deepmodel[Chengetal.,2016]fromgoogle,
+1 Introduction consideringlow-andhigh-orderfeatureinteractionssimulta-
+neouslybringsadditionalimprovementoverthecasesofcon-
+Thepredictionofclick-throughrate(CTR)iscriticalinrec- sideringeitheralone.
+ommendersystem,wherethetaskistoestimatetheprobabil-
+Thekeychallengeisineffectivelymodelingfeatureinter-
+ityauserwillclickonarecommendeditem. Inmanyrecom-
+actions. Somefeatureinteractionscanbeeasilyunderstood,
+mendersystemsthegoalistomaximizethenumberofclicks,
+thus can be designed by experts (like the instances above).
+andsotheitemsreturnedtoausercanberankedbyestimated
+However, most other feature interactions are hidden in data
+CTR;whileinotherapplicationscenariossuchasonlinead-
+anddifficulttoidentifyapriori(forinstance, theclassicas-
+vertising it is also important to improve revenue, and so the
+sociation rule “diaper and beer” is mined from data, instead
+rankingstrategycanbeadjustedasCTR×bidacrossallcan-
+ofdiscoveringbyexperts),whichcanonlybecapturedauto-
+didates, where“bid”isthebenefitthesystemreceivesifthe
+maticallybymachinelearning. Evenforeasy-to-understand
+itemisclickedbyauser. Ineithercase,itisclearthatthekey
+interactions,itseemsunlikelyforexpertstomodelthemex-
+isinestimatingCTRcorrectly.
+haustively,especiallywhenthenumberoffeaturesislarge.
+ItisimportantforCTRpredictiontolearnimplicitfeature
+Despitetheirsimplicity,generalizedlinearmodels,suchas
+interactions behind user click behaviors. By our study in a
+FTRL [McMahan et al., 2013], have shown decent perfor-
+mainstream apps market, we found that people often down-
+mance in practice. However, a linear model lacks the abil-
+loadappsforfooddeliveryatmeal-time,suggestingthatthe
+ity to learn feature interactions, and a common practice is
+(order-2) interaction between app category and time-stamp
+to manually include pairwise feature interactions in its fea-
+∗This work is done when Huifeng Guo worked as intern at ture vector. Such a method is hard to generalize to model
+Noah’sArkResearchLab,Huawei. high-orderfeatureinteractionsorthoseneverorrarelyappear
+†CorrespondingAuthor. in the training data [Rendle, 2010]. Factorization Machines
+7102
+raM
+31
+]RI.sc[
+1v74240.3071:viXra
+
+(FM) [Rendle, 2010] model pairwise feature interactions as clicked the item, and y = 0 otherwise). χ may include cat-
+inner product of latent vectors between features and show egorical fields (e.g., gender, location) and continuous fields
+very promising results. While in principle FM can model (e.g., age). Each categorical field is represented as a vec-
+high-orderfeatureinteraction,inpracticeusuallyonlyorder- tor of one-hot encoding, and each continuous field is repre-
+2featureinteractionsareconsideredduetohighcomplexity. sentedasthevalueitself,oravectorofone-hotencodingaf-
+As a powerful approach to learning feature representa- ter discretization. Then, each instance is converted to (x,y)
+tion, deep neural networks have the potential to learn so- where x = [x ,x ,...,x ,...,x ] is a d-
+field1 field2 filedj fieldm
+phisticated feature interactions. Some ideas extend CNN dimensionalvector,withx beingthevectorrepresenta-
+fieldj
+and RNN for CTR predition [Liu et al., 2015; Zhang et tion of the j-th field of χ. Normally, x is high-dimensional
+al., 2014], but CNN-based models are biased to the in- andextremelysparse.ThetaskofCTRpredictionistobuilda
+teractions between neighboring features while RNN-based predictionmodelyˆ= CTR model(x)toestimatetheprob-
+models are more suitable for click data with sequential de- abilityofauserclickingaspecificappinagivencontext.
+pendency. [Zhang et al., 2016] studies feature representa-
+tions and proposes Factorization-machine supported Neural 2.1 DeepFM
+Network (FNN). This model pre-trains FM before applying Weaimtolearnbothlow-andhigh-orderfeatureinteractions.
+DNN, thus limited by the capability of FM. Feature interac- Tothisend,weproposeaFactorization-Machinebasedneu-
+tion is studied in [Qu et al., 2016], by introducing a prod- ral network (DeepFM). As depicted in Figure 11, DeepFM
+uctlayerbetweenembeddinglayerandfully-connectedlayer, consists of two components, FM component and deep com-
+andproposingtheProduct-basedNeuralNetwork(PNN).As ponent, that share the same input. For feature i, a scalar w
+i
+notedin[Chengetal.,2016],PNNandFNN,likeotherdeep
+isusedtoweighitsorder-1importance, alatentvectorV is
+i
+models, capture little low-order feature interactions, which usedtomeasureitsimpactofinteractionswithotherfeatures.
+are also essential for CTR prediction. To model both low- V isfedinFMcomponenttomodelorder-2featureinterac-
+i
+andhigh-orderfeatureinteractions,[Chengetal.,2016]pro-
+tions,andfedindeepcomponenttomodelhigh-orderfeature
+posesaninterestinghybridnetworkstructure(Wide&Deep) interactions. All parameters, including w , V , and the net-
+i i
+thatcombinesalinear(“wide”)modelandadeepmodel. In workparameters(W(l),b(l)below)aretrainedjointlyforthe
+this model, two different inputs are required for the “wide
+combinedpredictionmodel:
+part” and “deep part”, respectively, and the input of “wide
+part”stillreliesonexpertisefeatureengineering. yˆ=sigmoid(y +y ), (1)
+FM DNN
+Onecanseethatexistingmodelsarebiasedtolow-orhigh-
+whereyˆ∈ (0,1)isthepredictedCTR,y istheoutputof
+order feature interaction, or rely on feature engineering. In FM
+FMcomponent,andy istheoutputofdeepcomponent.
+thispaper, weshowitispossibletoderivealearningmodel DNN
+thatisabletolearnfeatureinteractionsofallordersinanend-
+FMComponent
+to-end manner, without any feature engineering besides raw
+features. Ourmaincontributionsaresummarizedasfollows:
+• We propose a new neural network model DeepFM
+(Figure 1) that integrates the architectures of FM and
+deep neural networks (DNN). It models low-order fea-
+ture interactions like FM and models high-order fea-
+ture interactions like DNN. Unlike the wide & deep
+model[Chengetal.,2016],DeepFMcanbetrainedend-
+to-endwithoutanyfeatureengineering.
+• DeepFMcanbetrainedefficientlybecauseitswidepart
+and deep part, unlike [Cheng et al., 2016], share the
+sameinputandalsotheembeddingvector. In [Chenget Figure2: ThearchitectureofFM.
+al., 2016], theinputvectorcanbeofhugesizeasitin- The FM component is a factorization machine, which
+cludes manually designed pairwise feature interactions is proposed in [Rendle, 2010] to learn feature interactions
+in the input vector of its wide part, which also greatly for recommendation. Besides a linear (order-1) interactions
+increasesitscomplexity. amongfeatures,FMmodelspairwise(order-2)featureinter-
+actions as inner product of respective feature latent vectors.
+• WeevaluateDeepFMonbothbenchmarkdataandcom-
+mercialdata,whichshowsconsistentimprovementover
+1In all Figures of this paper, a Normal Connection in black
+existingmodelsforCTRprediction.
+referstoaconnectionwithweighttobelearned;aWeight-1Con-
+nection, redarrow, isaconnectionwithweight1bydefault; Em-
+2 OurApproach bedding,bluedashedarrow,meansalatentvectortobelearned;Ad-
+ditionmeansaddingallinputtogether; Product,includingInner-
+Suppose the data set for training consists of n instances
+andOuter-Product,meanstheoutputofthisunitistheproductof
+(χ,y), where χ is an m-fields data record usually involving twoinputvector;SigmoidFunctionisusedastheoutputfunction
+a pair of user and item, and y ∈ {0,1} is the associated la- inCTRprediction;ActivationFunctions,suchasreluandtanh,are
+bel indicating user click behaviors (y = 1 means the user usedfornon-linearlytransformingthesignal.
+
+It can capture order-2 feature interactions much more effec-
+tivelythanpreviousapproachesespeciallywhenthedatasetis
+sparse. In previous approaches, the parameter ofan interac-
+tionoffeaturesiandjcanbetrainedonlywhenfeatureiand
+featurejbothappearinthesamedatarecord.WhileinFM,it
+ismeasuredviatheinnerproductoftheirlatentvectorsV and
+i
+V . Thankstothisflexibledesign,FMcantrainlatentvector Figure4: Thestructureoftheembeddinglayer
+j
+V (V )wheneveri(orj)appearsinadatarecord. Therefore,
+i j their embeddings are of the same size (k); 2) the latent fea-
+featureinteractions,whichareneverorrarelyappearedinthe
+turevectors(V)inFMnowserverasnetworkweightswhich
+trainingdata,arebetterlearntbyFM.
+arelearnedandusedtocompresstheinputfieldvectorstothe
+AsFigure2shows, theoutputofFMisthesummationof
+embeddingvectors. In[Zhangetal.,2016],V ispre-trained
+anAdditionunitandanumberofInnerProductunits:
+byFMandusedasinitialization. Inthiswork,ratherthanus-
+d d ingthelatentfeaturevectorsofFMtoinitializethenetworks
+(cid:88) (cid:88)
+y
+FM
+=(cid:104)w,x(cid:105)+ (cid:104)V i,V j(cid:105)x
+j1
+·x j2, (2) asin[Zhangetal.,2016],weincludetheFMmodelaspartof
+j1=1j2=j1+1 ouroveralllearningarchitecture,inadditiontotheotherDNN
+model. Assuch,weeliminatetheneedofpre-trainingbyFM
+where w ∈ Rd and V ∈ Rk (k is given)2. The Addition
+i andinsteadjointlytraintheoverallnetworkinanend-to-end
+unit((cid:104)w,x(cid:105))reflectstheimportanceoforder-1features, and
+manner. Denotetheoutputoftheembeddinglayeras:
+theInnerProductunitsrepresenttheimpactoforder-2feature
+interactions. a(0) =[e 1,e 2,...,e m], (3)
+wheree istheembeddingofi-thfieldandmisthenumber
+DeepComponent i
+offields. Then,a(0) isfedintothedeepneuralnetwork,and
+theforwardprocessis:
+a(l+1) =σ(W(l)a(l)+b(l)), (4)
+wherelisthelayerdepthandσisanactivationfunction.a(l),
+W(l), b(l) are the output, model weight, and bias of the l-th
+layer. After that, a dense real-value feature vector is gener-
+ated, which is finally fed into the sigmoid function for CTR
+prediction: y = σ(W|H|+1·aH +b|H|+1), where |H|
+DNN
+isthenumberofhiddenlayers.
+ItisworthpointingoutthatFMcomponentanddeepcom-
+ponentsharethesamefeatureembedding, whichbringstwo
+Figure3: ThearchitectureofDNN. importantbenefits: 1)itlearnsbothlow-andhigh-orderfea-
+The deep component is a feed-forward neural network, tureinteractionsfromrawfeatures;2)thereisnoneedforex-
+which is used to learn high-order feature interactions. As pertise feature engineering of the input, as required in Wide
+showninFigure3,adatarecord(avector)isfedintotheneu-
+&Deep[Chengetal.,2016].
+ral network. Compared to neural networks with image [He
+2.2 RelationshipwiththeotherNeuralNetworks
+etal.,2016]oraudio[Boulanger-Lewandowskietal.,2013]
+data as input, which is purely continuous and dense, the in- Inspired by the enormous success of deep learning in var-
+put of CTR prediction is quite different, which requires a ious applications, several deep models for CTR prediction
+new network architecture design. Specifically, the raw fea- are developed recently. This section compares the proposed
+tureinputvectorforCTRpredictionisusuallyhighlysparse3, DeepFMwithexistingdeepmodelsforCTRprediction.
+super high-dimensional4, categorical-continuous-mixed, and FNN:AsFigure5(left)shows,FNNisaFM-initializedfeed-
+groupedinfields(e.g., gender, location, age). Thissuggests forward neural network [Zhang et al., 2016]. The FM pre-
+an embedding layer to compress the input vector to a low- trainingstrategyresultsintwolimitations: 1)theembedding
+dimensional, dense real-value vector before further feeding parametersmightbeoveraffectedbyFM;2)theefficiencyis
+intothefirsthiddenlayer,otherwisethenetworkcanbeover- reducedbytheoverheadintroducedbythepre-trainingstage.
+whelmingtotrain. In addition, FNN captures only high-order feature interac-
+Figure4highlightsthesub-networkstructurefromthein- tions. Incontrast, DeepFMneedsnopre-trainingandlearns
+putlayertotheembeddinglayer. Wewouldliketopointout bothhigh-andlow-orderfeatureinteractions.
+thetwointerestingfeaturesofthisnetworkstructure:1)while PNN:Forthepurposeofcapturinghigh-orderfeatureinterac-
+the lengths of different input field vectors can be different, tions, PNNimposesa productlayerbetweentheembedding
+layerandthefirsthiddenlayer[Quetal., 2016]. According
+2Weomitaconstantoffsetforsimplicity. to different types of product operation, there are three vari-
+3Onlyoneentryisnon-zeroforeachfieldvector. ants: IPNN,OPNN,andPNN∗,whereIPNNisbasedonin-
+4E.g.,inanappstoreofbillionusers,theonefieldvectorforuser nerproductofvectors,OPNNisbasedonouterproduct,and
+IDisalreadyofbilliondimensions. PNN∗isbasedonbothinnerandouterproducts.
+
+Figure5: ThearchitecturesofexistingdeepmodelsforCTRprediction:FNN,PNN,Wide&DeepModel
+3 Experiments
+Table1: ComparisonofdeepmodelsforCTRprediction
+No High-order Low-order NoFeature In this section, we compare our proposed DeepFM and the
+Pre-training Fea √tures Features Engin √eering other state-of-the-art models empirically. The evaluation re-
+FNN × ×
+√ √ √ sult indicates that our proposed DeepFM is more effective
+PNN ×
+Wide&Deep √ √ √ × than any other state-of-the-art model and the efficiency of
+√ √ √ √
+DeepFM DeepFMiscomparabletothebestonesamongtheothers.
+3.1 ExperimentSetup
+Datasets
+To make the computation more efficient, the authors pro-
+Weevaluatetheeffectivenessandefficiencyofourproposed
+posedtheapproximatedcomputationsofbothinnerandouter
+DeepFMonthefollowingtwodatasets.
+products: 1)theinnerproductisapproximatelycomputedby
+1)CriteoDataset:Criteodataset5includes45millionusers’
+eliminating some neurons; 2) the outer product is approxi-
+clickrecords. Thereare13continuousfeaturesand26cate-
+mately computed by compressing m k-dimensional feature
+gorical ones. We split the dataset randomly into two parts:
+vectors to one k-dimensional vector. However, we find that
+90%isfortraining,whiletherest10%isfortesting.
+theouterproductislessreliablethantheinnerproduct,since
+2)Company∗Dataset: Inordertoverifytheperformanceof
+the approximated computation of outer product loses much
+DeepFMinrealindustrialCTRprediction,weconductexper-
+information that makes the result unstable. Although inner
+iment on Company∗ dataset. We collect 7 consecutive days
+product is more reliable, it still suffers from high computa-
+ofusers’clickrecordsfromthegamecenteroftheCompany∗
+tionalcomplexity, because theoutputofthe productlayeris
+AppStorefortraining,andthenext1dayfortesting. There
+connected to all neurons of the first hidden layer. Different
+are around 1 billion records in the whole collected dataset.
+from PNN, the output of the product layer in DeepFM only
+Inthisdataset,thereareappfeatures(e.g.,identification,cat-
+connectstothefinaloutputlayer(oneneuron). LikeFNN,all
+egory, and etc), user features (e.g., user’s downloaded apps,
+PNNsignorelow-orderfeatureinteractions.
+andetc),andcontextfeatures(e.g.,operationtime,andetc).
+Wide&Deep: Wide&Deep(Figure5(right))isproposed
+EvaluationMetrics
+byGoogletomodellow-andhigh-orderfeatureinteractions
+We use two evaluation metrics in our experiments: AUC
+simultaneously. As shown in [Cheng et al., 2016], there is
+(AreaUnderROC)andLogloss(crossentropy).
+a need for expertise feature engineering on the input to the
+“wide”part(forinstance,cross-productofusers’installapps ModelComparison
+and impression apps in app recommendation). In contrast,
+We compare 9 models in our experiments: LR, FM, FNN,
+DeepFM needs no such expertise knowledge to handle the
+PNN (three variants), Wide & Deep, and DeepFM. In the
+inputbylearningdirectlyfromtheinputrawfeatures.
+Wide & Deep model, for the purpose of eliminating feature
+engineering effort, we also adapt the original Wide & Deep
+AstraightforwardextensiontothismodelisreplacingLR
+model by replacing LR by FM as the wide part. In order
+by FM (we also evaluate this extension in Section 3). This
+to distinguish these two variants of Wide & Deep, we name
+extensionissimilartoDeepFM,butDeepFMsharesthefea-
+themLR&DNNandFM&DNN,respectively.6
+ture embedding between the FM and deep component. The
+sharing strategy of feature embedding influences (in back- ParameterSettings
+propagate manner) the feature representation by both low-
+To evaluate the models on Criteo dataset, we follow the pa-
+andhigh-orderfeatureinteractions, whichmodelstherepre- rameter settings in [Qu et al., 2016] for FNN and PNN: (1)
+sentationmoreprecisely.
+5http://labs.criteo.com/downloads/2014-kaggle-display-
+Summarizations: To summarize, the relationship between
+advertising-challenge-dataset/
+DeepFM and the other deep models in four aspects is pre- 6We do not use the Wide & Deep API released by Google, as
+sentedinTable1. Ascanbeseen,DeepFMistheonlymodel the efficiency of that implementation is very low. We implement
+thatrequiresnopre-trainingandnofeatureengineering,and Wide&Deepbyourselvesbysimplifyingitwithsharedoptimizer
+capturesbothlow-andhigh-orderfeatureinteractions. forbothdeepandwidepart.
+
+dropout: 0.5; (2) network structure: 400-400-400; (3) opti- DeepFM outperforms the models that learn high- and
+mizer: Adam;(4)activationfunction: tanhforIPNN,relufor low-orderfeatureinteractionsusingseparatefeatureem-
+other deep models. To be fair, our proposed DeepFM uses beddings(namely,LR&DNNandFM&DNN).Com-
+the same setting. The optimizers of LR and FM are FTRL paredtothesetwomodels,DeepFMachievesmorethan
+andAdamrespectively,andthelatentdimensionofFMis10. 0.48% and 0.33% in terms of AUC (0.61% and 0.66%
+Toachievethebestperformanceforeachindividualmodel intermsofLogloss)onCompany∗andCriteodatasets.
+on Company∗ dataset, we conducted carefully parameter
+study,whichisdiscussedinSection3.3.
+Table2: PerformanceonCTRprediction.
+3.2 PerformanceEvaluation
+Company∗ Criteo
+Inthissection,weevaluatethemodelslistedinSection3.1on AUC LogLoss AUC LogLoss
+thetwodatasetstocomparetheireffectivenessandefficiency. LR 0.8640 0.02648 0.7686 0.47762
+FM 0.8678 0.02633 0.7892 0.46077
+EfficiencyComparison FNN 0.8683 0.02629 0.7963 0.45738
+The efficiency of deep learning models is important to real- IPNN 0.8664 0.02637 0.7972 0.45323
+world applications. We compare the efficiency of differ- OPNN 0.8658 0.02641 0.7982 0.45256
+ent models on Criteo dataset by the following formula: PNN∗ 0.8672 0.02636 0.7987 0.45214
+|trainingtimeof deepCTRmodel|. The results are shown in LR&DNN 0.8673 0.02634 0.7981 0.46772
+|trainingtimeof LR| FM&DNN 0.8661 0.02640 0.7850 0.45382
+Figure 6, including the tests on CPU (left) and GPU (right), DeepFM 0.8715 0.02618 0.8007 0.45083
+where we have the following observations: 1) pre-training
+of FNN makes it less efficient; 2) Although the speed up of
+Overall, our proposed DeepFM model beats the competi-
+IPNN and PNN∗ on GPU is higher than the other models,
+tors by more than 0.37% and 0.42% in terms of AUC and
+they are still computationally expensive because of the in-
+Logloss on Company∗ dataset, respectively. In fact, a small
+efficient inner product operations; 3) The DeepFM achieves
+improvementinofflineAUCevaluationislikelytoleadtoa
+almostthemostefficientinbothtests. significantincreaseinonlineCTR.Asreportedin [Chenget
+al.,2016],comparedwithLR,Wide&DeepimprovesAUC
+by 0.275% (offline) and the improvement of online CTR is
+3.9%. The daily turnover of Company∗’s App Store is mil-
+lions of dollars, therefore even several percents lift in CTR
+bringsextramillionsofdollarseachyear.
+3.3 Hyper-ParameterStudy
+Figure6: Timecomparison.
+Westudytheimpactofdifferenthyper-parametersofdiffer-
+entdeepmodels,onCompany∗dataset. Theorderis: 1)ac-
+EffectivenessComparison
+tivationfunctions;2)dropoutrate;3)numberofneuronsper
+The performance for CTR prediction of different models on
+layer;4)numberofhiddenlayers;5)networkshape.
+Criteo dataset and Company∗ dataset is shown in Table 2,
+wherewehavethefollowingobservations: ActivationFunction
+• Learningfeatureinteractionsimprovestheperformance According to [Qu et al., 2016], relu and tanh are more suit-
+ablefordeepmodelsthansigmoid.Inthispaper,wecompare
+ofCTRpredictionmodel. Thisobservationisfromthe
+theperformanceofdeepmodelswhenapplyingreluandtanh.
+factthatLR(whichistheonlymodelthatdoesnotcon-
+AsshowninFigure7,reluismoreappropriatethantanhfor
+siderfeatureinteractions)performsworsethantheother
+allthedeepmodels,exceptforIPNN.Possiblereasonisthat
+models.Asthebestmodel,DeepFMoutperformsLRby
+reluinducessparsity.
+0.86%and4.18%intermsofAUC(1.15%and5.60%in
+termsofLogloss)onCompany∗andCriteodatasets.
+• Learning high- and low-order feature interactions si-
+multaneously and properly improves the performance
+of CTR prediction model. DeepFM outperforms the
+models that learn only low-order feature interactions
+(namely,FM)orhigh-orderfeatureinteractions(namely,
+FNN, IPNN, OPNN, PNN∗). Compared to the second
+best model, DeepFM achieves more than 0.37% and
+0.25% in terms of AUC (0.42% and 0.29% in terms of Figure7: AUCandLoglosscomparisonofactivationfunctions.
+Logloss)onCompany∗andCriteodatasets.
+Dropout
+• Learning high- and low-order feature interactions si- Dropout[Srivastavaetal.,2014]referstotheprobabilitythat
+multaneously while sharing the same feature embed- a neuron is kept in the network. Dropout is a regularization
+ding for high- and low-order feature interactions learn- techniquetocompromisetheprecisionandthecomplexityof
+ingimprovestheperformanceofCTRpredictionmodel. theneuralnetwork.Wesetthedropouttobe1.0,0.9,0.8,0.7,
+
+0.6,0.5.AsshowninFigure8,allthemodelsareabletoreach 200-300),decreasing(300-200-100),anddiamond(150-300-
+theirownbestperformancewhenthedropoutisproperlyset 150). AswecanseefromFigure11,the“constant”network
+(from 0.6 to 0.9). The result shows that adding reasonable shapeisempiricallybetterthantheotherthreeoptions,which
+randomnesstomodelcanstrengthenmodel’srobustness. isconsistentwithpreviousstudies[Larochelleetal.,2009].
+Figure11: AUCandLoglosscomparisonofnetworkshape.
+Figure8: AUCandLoglosscomparisonofdropout.
+NumberofNeuronsperLayer 4 RelatedWork
+When other factors remain the same, increasing the number
+Inthispaper,anewdeepneuralnetworkisproposedforCTR
+of neurons per layer introduces complexity. As we can ob-
+prediction.ThemostrelateddomainsareCTRpredictionand
+serve from Figure 9, increasing the number of neurons does
+deep learning in recommender system. In this section, we
+notalwaysbringbenefit.Forinstance,DeepFMperformssta-
+discussrelatedworkinthesetwodomains.
+blywhenthenumberofneuronsperlayerisincreasedfrom
+CTR prediction plays an important role in recommender
+400to800;evenworse,OPNNperformsworsewhenwein-
+system [Richardson et al., 2007; Juan et al., 2016; McMa-
+crease the number of neurons from 400 to 800. This is be-
+han et al., 2013]. Besides generalized linear models and
+cause an over-complicated model is easy to overfit. In our
+FM, a few other models are proposed for CTR prediction,
+dataset,200or400neuronsperlayerisagoodchoice.
+such as tree-based model [He et al., 2014], tensor based
+model [Rendle and Schmidt-Thieme, 2010], support vector
+machine [Chang et al., 2010], and bayesian model [Graepel
+etal.,2010].
+Theotherrelateddomainisdeeplearninginrecommender
+systems. In Section 1 and Section 2.2, several deep learn-
+ing models for CTR prediction are already mentioned, thus
+we do not discuss about them here. Several deep learn-
+ingmodelsareproposedinrecommendationtasksotherthan
+CTR prediction (e.g., [Covington et al., 2016; Salakhutdi-
+Figure9: AUCandLoglosscomparisonofnumberofneurons.
+nov et al., 2007; van den Oord et al., 2013; Wu et al.,
+NumberofHiddenLayers 2016; Zheng et al., 2016; Wu et al., 2017; Zheng et al.,
+AspresentedinFigure10,increasingnumberofhiddenlay- 2017]). [Salakhutdinov et al., 2007; Sedhain et al., 2015;
+ersimprovestheperformanceofthemodelsatthebeginning, Wang et al., 2015] propose to improve Collaborative Filter-
+however,theirperformanceisdegradedifthenumberofhid- ingviadeeplearning.Theauthorsof[WangandWang,2014;
+den layers keeps increasing. This phenomenon is also be- van den Oord et al., 2013] extract content feature by deep
+causeofoverfitting. learningtoimprovetheperformanceofmusicrecommenda-
+tion. [Chen et al., 2016] devises a deep learning network to
+consider both image feature and basic feature of display ad-
+verting. [Covington et al., 2016] develops a two-stage deep
+learningframeworkforYouTubevideorecommendation.
+5 Conclusions
+Inthispaper,weproposedDeepFM,aFactorization-Machine
+based Neural Network for CTR prediction, to overcome the
+Figure10: AUCandLoglosscomparisonofnumberoflayers. shortcomings of the state-of-the-art models and to achieve
+better performance. DeepFM trains a deep component and
+NetworkShape anFMcomponentjointly. Itgainsperformanceimprovement
+We test four different network shapes: constant, increasing, from these advantages: 1) it does not need any pre-training;
+decreasing, and diamond. When we change the network 2) it learns both high- and low-order feature interactions; 3)
+shape,wefixthenumberofhiddenlayersandthetotalnum- itintroducesasharingstrategyoffeatureembeddingtoavoid
+berofneurons. Forinstance,whenthenumberofhiddenlay- featureengineering. Weconductedextensiveexperimentson
+ersis3andthetotalnumberofneuronsis600,thenfourdif- tworeal-worlddatasets(CriteodatasetandacommercialApp
+ferent shapes are: constant (200-200-200), increasing (100- Storedataset)tocomparetheeffectivenessandefficiencyof
+
+DeepFMandthestate-of-the-artmodels. Ourexperimentre- [McMahanetal.,2013] H. Brendan McMahan, Gary Holt,
+sults demonstrate that 1) DeepFM outperforms the state-of- David Sculley, Michael Young, Dietmar Ebner, Julian
+the-artmodelsintermsofAUCandLoglossonbothdatasets; Grady, Lan Nie, Todd Phillips, Eugene Davydov, Daniel
+2)TheefficiencyofDeepFMiscomparabletothemosteffi- Golovin, Sharat Chikkerur, Dan Liu, Martin Wattenberg,
+cientdeepmodelinthestate-of-the-art. Arnar Mar Hrafnkelsson, Tom Boulos, and Jeremy Ku-
+There are two interesting directions for future study. One bica. Ad click prediction: a view from the trenches. In
+isexploringsomestrategies(suchasintroducingpoolinglay- KDD,2013.
+ers) to strengthen the ability of learning most useful high-
+[Quetal.,2016] Yanru Qu, Han Cai, Kan Ren, Weinan
+orderfeatureinteractions. TheotheristotrainDeepFMona
+Zhang, Yong Yu, Ying Wen, and Jun Wang. Product-
+GPUclusterforlarge-scaleproblems.
+basedneuralnetworksforuserresponseprediction.CoRR,
+abs/1611.00144,2016.
+References
+[RendleandSchmidt-Thieme,2010] Steffen Rendle and
+[Boulanger-Lewandowskietal.,2013] Nicolas Boulanger-
+LarsSchmidt-Thieme. Pairwiseinteractiontensorfactor-
+Lewandowski, Yoshua Bengio, and Pascal Vincent. Au-
+ization for personalized tag recommendation. In WSDM,
+dio chord recognition with recurrent neural networks. In
+pages81–90,2010.
+ISMIR,pages335–340,2013.
+[Changetal.,2010] Yin-Wen Chang, Cho-Jui Hsieh, Kai- [Rendle,2010] Steffen Rendle. Factorization machines. In
+WeiChang,MichaelRinggaard,andChih-JenLin. Train- ICDM,2010.
+ingandtestinglow-degreepolynomialdatamappingsvia [Richardsonetal.,2007] Matthew Richardson, Ewa Domi-
+linearSVM. JMLR,11:1471–1490,2010.
+nowska,andRobertRagno. Predictingclicks: estimating
+[Chenetal.,2016] Junxuan Chen, Baigui Sun, Hao Li, theclick-throughratefornewads. InWWW,pages521–
+HongtaoLu,andXian-ShengHua. DeepCTRprediction 530,2007.
+indisplayadvertising. InMM,2016.
+[Salakhutdinovetal.,2007] Ruslan Salakhutdinov, Andriy
+[Chengetal.,2016] Heng-Tze Cheng, Levent Koc, Mnih,andGeoffreyE.Hinton. Restrictedboltzmannma-
+Jeremiah Harmsen, Tal Shaked, Tushar Chandra, chinesforcollaborativefiltering.InICML,pages791–798,
+Hrishi Aradhye, Glen Anderson, Greg Corrado, Wei 2007.
+Chai, Mustafa Ispir, Rohan Anil, Zakaria Haque, Lichan
+[Sedhainetal.,2015] Suvash Sedhain, Aditya Krishna
+Hong, VihanJain, XiaobingLiu, andHemalShah. Wide
+Menon, Scott Sanner, and Lexing Xie. Autorec: Au-
+& deep learning for recommender systems. CoRR,
+toencoders meet collaborative filtering. In WWW, pages
+abs/1606.07792,2016.
+111–112,2015.
+[Covingtonetal.,2016] Paul Covington, Jay Adams, and
+Emre Sargin. Deep neural networks for youtube recom- [Srivastavaetal.,2014] Nitish Srivastava, Geoffrey E. Hin-
+mendations. InRecSys,pages191–198,2016. ton, Alex Krizhevsky, Ilya Sutskever, and Ruslan
+Salakhutdinov. Dropout: a simple way to prevent neural
+[Graepeletal.,2010] Thore Graepel, Joaquin Quin˜onero
+networksfromoverfitting.JMLR,15(1):1929–1958,2014.
+Candela, Thomas Borchert, and Ralf Herbrich. Web-
+scalebayesianclick-throughratepredictionforsponsored [vandenOordetal.,2013] Aa¨ron van den Oord, Sander
+search advertising in microsoft’s bing search engine. In Dieleman,andBenjaminSchrauwen. Deepcontent-based
+ICML,pages13–20,2010. musicrecommendation.InNIPS,pages2643–2651,2013.
+[Heetal.,2014] Xinran He, Junfeng Pan, Ou Jin, Tianbing [WangandWang,2014] XinxiWangandYeWang. Improv-
+Xu, Bo Liu, Tao Xu, Yanxin Shi, Antoine Atallah, Ralf ing content-based and hybrid music recommendation us-
+Herbrich,StuartBowers,andJoaquinQuin˜oneroCandela. ingdeeplearning. InACMMM,pages627–636,2014.
+Practicallessonsfrompredictingclicksonadsatfacebook.
+InADKDD,pages5:1–5:9,2014. [Wangetal.,2015] Hao Wang, Naiyan Wang, and Dit-Yan
+Yeung. Collaborativedeeplearningforrecommendersys-
+[Heetal.,2016] Kaiming He, Xiangyu Zhang, Shaoqing
+tems. InACMSIGKDD,pages1235–1244,2015.
+Ren,andJianSun.Deepresiduallearningforimagerecog-
+nition. InCVPR,pages770–778,2016. [Wuetal.,2016] Yao Wu, Christopher DuBois, Alice X.
+Zheng, and Martin Ester. Collaborative denoising auto-
+[Juanetal.,2016] Yu-Chin Juan, Yong Zhuang, Wei-Sheng
+encodersfortop-nrecommendersystems.InACMWSDM,
+Chin, and Chih-Jen Lin. Field-aware factorization ma-
+pages153–162,2016.
+chinesforCTRprediction. InRecSys,pages43–50,2016.
+[Larochelleetal.,2009] Hugo Larochelle, Yoshua Bengio, [Wuetal.,2017] Chao-Yuan Wu, Amr Ahmed, Alex Beu-
+Je´roˆmeLouradour,andPascalLamblin. Exploringstrate- tel,AlexanderJ.Smola,andHowJing. Recurrentrecom-
+gies for training deep neural networks. JMLR, 10:1–40, mendernetworks. InWSDM,pages495–503,2017.
+2009. [Zhangetal.,2014] Yuyu Zhang, Hanjun Dai, Chang Xu,
+[Liuetal.,2015] Qiang Liu, Feng Yu, Shu Wu, and Liang JunFeng, TaifengWang, JiangBian, BinWang, andTie-
+Wang. Aconvolutionalclickpredictionmodel. InCIKM, YanLiu. Sequentialclickpredictionforsponsoredsearch
+2015. withrecurrentneuralnetworks. InAAAI,2014.
+
+[Zhangetal.,2016] Weinan Zhang, Tianming Du, and Jun
+Wang. Deeplearningovermulti-fieldcategoricaldata--
+Acasestudyonuserresponseprediction. InECIR,2016.
+[Zhengetal.,2016] Yin Zheng, Yu-Jin Zhang, and Hugo
+Larochelle. Adeepandautoregressiveapproachfortopic
+modeling of multimodal data. IEEE Trans. Pattern Anal.
+Mach.Intell.,38(6):1056–1069,2016.
+[Zhengetal.,2017] LeiZheng,VahidNoroozi,andPhilipS.
+Yu. Jointdeepmodelingofusersanditemsusingreviews
+forrecommendation. InWSDM,pages425–434,2017.

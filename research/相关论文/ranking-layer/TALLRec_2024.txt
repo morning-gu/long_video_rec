@@ -1,0 +1,558 @@
+TALLRec: An Effective and Efficient Tuning Framework to Align
+Large Language Model with Recommendation
+KeqinBao* JizhiZhang* YangZhang
+baokq@mail.ustc.edu.cn cdzhangjizhi@mail.ustc.edu.cn zy2015@mail.ustc.edu.cn
+UniversityofScienceandTechnology UniversityofScienceandTechnology UniversityofScienceandTechnology
+ofChina ofChina ofChina
+China China China
+WenjieWang FuliFeng† XiangnanHe†
+wenjiewang96@gmail.com fulifeng93@gmail.com xiangnanhe@gmail.com
+NationalUniversityofSingapore UniversityofScienceandTechnology UniversityofScienceandTechnology
+Singapore ofChina ofChina
+China China
+ABSTRACT ACMReferenceFormat:
+LargeLanguageModels(LLMs)havedemonstratedremarkableper- KeqinBao*,JizhiZhang*,YangZhang,WenjieWang,FuliFeng†,andXi-
+angnanHe†.2023.TALLRec:AnEffectiveandEfficientTuningFrame-
+formanceacrossdiversedomains,therebypromptingresearchersto
+worktoAlignLargeLanguageModelwithRecommendation.InSeven- exploretheirpotentialforuseinrecommendationsystems.Initialat-
+teenthACMConferenceonRecommenderSystems(RecSys’23),September
+temptshaveleveragedtheexceptionalcapabilitiesofLLMs,suchas
+18–22,2023,Singapore,Singapore.ACM,NewYork,NY,USA,8pages.https:
+richknowledgeandstronggeneralizationthroughIn-contextLearn-
+//doi.org/10.1145/3604915.3608857
+ing,whichinvolvesphrasingtherecommendationtaskasprompts.
+Nevertheless,theperformanceofLLMsinrecommendationtasks 1 INTRODUCTION
+remainssuboptimalduetoasubstantialdisparitybetweenthetrain-
+LargeLanguageModels(LLMs)haveexhibitedremarkableprofi-
+ingtasksforLLMsandrecommendationtasks,aswellasinadequate
+ciencyingeneratingtextthatcloselyresembleshumanlanguage
+recommendationdataduringpre-training.Tobridgethegap,we
+andinperformingawiderangeoftasks[69],includingNaturalLan-
+considerbuildingaLargeRecommendationLanguageModelby
+guageProcessing[4,32,54],Robotics[10,43,56],andInformation
+tunningLLMswithrecommendationdata.Tothisend,wepropose
+Retrieval[1,24,25,48].Priorresearchhasalsodemonstratedthe
+anefficientandeffectiveTuningframeworkforAligningLLMswith
+knowledge-richandcompositionalgeneralizationcapabilitiesof
+Recommendations,namelyTALLRec.Wehavedemonstratedthat
+LLMs[36,41,53].Onlygivenappropriateinstructions,thesemod-
+theproposedTALLRecframeworkcansignificantlyenhancetherec-
+elsareabletolearnhowtosolveunseentasksandinspiretheirown
+ommendationcapabilitiesofLLMsinthemovieandbookdomains,
+knowledgetoachieveahighlevelofperformance[33].Theafore-
+evenwithalimiteddatasetoffewerthan100samples.Additionally,
+mentionedcapabilitiesofLLMpresentpromisingopportunities
+theproposedframeworkishighlyefficientandcanbeexecutedon
+toaddressthecurrentchallengesrequiringstronggeneralization
+asingleRTX3090withLLaMA-7B.Furthermore,thefine-tuned
+andrichknowledgeintherecommendationfield.Inthislight,it
+LLMexhibitsrobustcross-domaingeneralization.Ourcodeand
+isvaluabletoexploretheintegrationofLLMsintorecommender
+dataareavailableathttps://github.com/SAI990323/TALLRec.
+systems,whichhasreceivedlimitedattentioninpriorresearch.
+Inrecentinitialattempts[13,47],achievingthetargetrelieson
+CCSCONCEPTS
+In-contextLearning[3],whichistypicallyimplementedthroughthe
+•Informationsystems→Recommendersystems. officialOpenAIAPI[2].TheyregardtheLLMasatoolformer[42]
+oftraditionalrecommendationmodels(suchasMF[27]andLight-
+KEYWORDS GCN[16]),i.e.,theLLMisusedforre-rankingthecandidateitems
+Recommendation,InstructionTuning,LargeLanguageModels filteredbythesemodels.However,theseapproachesonlyreacha
+comparableperformancewithtraditionalmodels[13,47].Worse
+*Thetwoauthorscontributedequallytothisworkandarelistedalphabetically.†The still,usingonlyIn-contextLearningmayfailtomakerecommen-
+correspondingauthor. dations.AsshowninFigure1,wefindthatChatGPTeitherrefuses
+toansweroralwaysgivespositivepredictions(likes).Therefore,it
+Permissiontomakedigitalorhardcopiesofallorpartofthisworkforpersonalor
+iscriticaltofurtherexploreanappropriatewayformoreeffective
+classroomuseisgrantedwithoutfeeprovidedthatcopiesarenotmadeordistributed
+forprofitorcommercialadvantageandthatcopiesbearthisnoticeandthefullcitation leverageofLLMsintherecommendation.
+onthefirstpage.Copyrightsforcomponentsofthisworkownedbyothersthanthe WepostulatethatthefailureofusingonlyIn-contextLearn-
+author(s)mustbehonored.Abstractingwithcreditispermitted.Tocopyotherwise,or
+ingisbecauseoftworeasons:1)LLMsmaynotalignwellwith
+republish,topostonserversortoredistributetolists,requirespriorspecificpermission
+and/orafee.Requestpermissionsfrompermissions@acm.org. therecommendationtaskduetothehugegapbetweenlanguage
+RecSys’23,September18–22,2023,Singapore,Singapore processingtasksfortrainingLLMsandrecommendation.Besides,
+©2023Copyrightheldbytheowner/author(s).PublicationrightslicensedtoACM.
+therecommendation-orientedcorpusisverylimitedduringthe
+ACMISBN979-8-4007-0241-9/23/09...$15.00
+https://doi.org/10.1145/3604915.3608857 trainingphaseofLLMs.2)TheeffectofLLMsisrestrictedbythe
+3202
+tcO
+71
+]RI.sc[
+3v74400.5032:viXra
+
+RecSys’23,September18–22,2023,Singapore,Singapore KeqinBao*,JizhiZhang*,YangZhang,WenjieWang,FuliFeng†,andXiangnanHe†
+LLM e.g.
+Instruction ChatGPT
+100%
+oitaR
+LLM Fails !
+100%
+53% 47% Fail
+0% 0%
+Ground Truth ChatGPT
+Rec
+CUA
+0.75 LLMs on Movie Rec
+Davinci
+003 (GPT3) ChatGPT
+0.53
+0.5
+0.5
+Davinci
+Alpaca 002 (GPT3)
+0.46 0.49
+CUA
+Rec Task Sample
+Historical Sequence
+Like Dislike
+… 0.75 LLMs on Book Rec
+Difficult to
+determine Alpaca Item Recommend whether they 0.53 ChatGPT
+will like … 0.5
+(refuse to 0.5
+answer)
+Davinci Davinci
+002 (GPT3) 003 (GPT3)
+0.46 0.46
+Refuse
+Figure1:IllustrationofLLMsfortherecommendations.Givenusers’interactionhistory,LLMspredictwhetherauserwilllike
+anewitemthroughIn-contextLearning.However,therepresentativeLLMs,e.g.,ChatGPT,eitherrefusetoansweroralways
+givepositivepredictions(likes)onMovieandBookrecommendationtasks.IfweignoretherefusedanswersandcalculateAUC
+ontheremainingsamples,wefindthatLLMsperformsimilarlywithrandomguessing(AUC=0.5).RefertoSection3formore
+experimentaldetails.
+Table1:Atuningsampleforatranslationtask.
+underlying recommendation models, which may fail to include InstructionInput
+targetitemsintheircandidatelistsduetotheirlimitedcapacity.
+TaskInstruction: TranslatefromEnglishtoChinese.
+Therefore,weconsiderbuildingaLargeRecommendationLanguage
+TaskInput: WhoamI?
+Model(LRLM)tobridgethegapbetweenLLMsandtherecommen-
+dationtaskandbetterstimulatetherecommendationcapabilities InstructionOutput
+ofLLMsinadditiontoIn-contextLearning. TaskOutput: 我是谁?
+Towardthisgoal,wefocusontuningLLMswiththerecommen-
+dationtask.Consideringthatinstructiontuningiscoretoletting
+theLLMlearntosolvedifferenttasksandhavestronggeneraliza-
+limitations of In-context Learning-based approaches and
+tionability[22,23,37],weproposealightweighttuningframework
+underscorethesignificanceofinstructiontuning.
+toadaptLLMsforrecommendations,namedTALLRec.Elaborately,
+• WeintroduceanewTALLRecframeworktobuildLargeRec-
+TALLRecstructurestherecommendationdataasinstructionsand
+ommendationLanguageModels,whichenablestheeffective
+tunestheLLMviaanadditionalinstructiontuningprocess.More-
+andefficienttuningofLLMsforrecommendationwithlow
+over,giventhatLLMtrainingnecessitatesasubstantialamount
+GPUcostsandfewtuningsamples.
+ofcomputingresources,TALLRecemploysalightweighttuning
+• Weconductextensiveexperiments,validatingtheeffective-
+approachtoefficientlyadapttheLLMstotherecommendationtask.
+nessandefficiencyoftheproposedframework,anduncov-
+Specifically,weapplytheTALLRecframeworkontheLLaMA-
+eringitsexceptionalrobustnesswithseamlessnavigation
+7Bmodel[46]withaLoRA[21]architecture,whichensuresthe
+acrossdifferentdomains.
+frameworkcanbedeployedonanNvidiaRTX3090(24GB)GPU.
+Furthermore,toinvestigatetheminimalcomputationalresources 2 TALLREC
+required,wedoexperimentsinafew-shotsetting,utilizingonly
+Inthissection,wefirstintroducethepreliminaryknowledgefor
+alimitednumberoftuningexamples.Weconductdetailedexper-
+tuningLLMsandourtaskformulation,andthenpresentthepro-
+imentsinknowledge-richrecommendationscenariosofmovies
+posedTALLRecframework.
+and books, where the tuned LLaMA-7B model outperforms tra-
+ditional recommendation models and In-context Learning with
+2.1 Preliminary
+GPT3.5,amuchstrongerLLMthanLLaMA-7B.Theresultsvalidate
+theefficiencyandrobustnessofourframework:1)ourTALLRec
+•InstructionTuningisacrucialtechniquetotrainLLMswith
+frameworkcanquicklyinspiretherecommendationcapabilityof human-annotatedinstructionsandresponses[36].Generally,in-
+LLMsinthefew-shotsetting.and2)LLMstrainedviatheTALL- structiontuninghasfoursteps(seetheexampleinTable2).Specifi-
+Recframeworkhaveastronggeneralizationabilityacrossdifferent cally,Step1:Defineataskandarticulatea“TaskInstruction”using
+domains(e.g.,movie→book). naturallanguage,whichusuallyencompassesacleardefinitionof
+Intotal,ourcontributionsaresummarizedasfollows: thetask,aswellasspecificsolutionstoaddressit.Step2:Formulate
+andconstructtheinputandoutputofthetaskinnaturallanguage,
+• We study a new problem in recommendation — aligning denotedas“TaskInput”and“TaskOutput”.Step3:Integratethe
+theLLMswiththerecommendation,wherewerevealthe “TaskInstruction”and“TaskInput”togethertoformthe“Instruction
+
+TALLRec:AnEffectiveandEfficientTuningFrameworktoAlignLargeLanguageModelwithRecommendation RecSys’23,September18–22,2023,Singapore,Singapore
+Table2:Atuningsampleforrec-tuning. Formally,
+|𝑦|
+∑︁ ∑︁
+InstructionInput max log(𝑃Φ(𝑦𝑡|𝑥,𝑦<𝑡)), (1)
+Φ
+(𝑥,𝑦)∈Z𝑡=1
+Giventheuser’shistoricalinteractions,pleasedetermine
+TaskInstruction: whethertheuserwillenjoythetargetnewmovieby where𝑥 and𝑦 representthe“InstructionInput”and“Instruction
+answering"Yes"or"No". Output”intheself-instructdata,respectively,𝑦
+𝑡
+isthe𝑡-thtoken
+User’slikeditems:GodFather. of the𝑦,𝑦 <𝑡 represents the tokens before𝑦 𝑡, Φ is the original
+TaskInput: User’sdislikeditems:StarWars. parametersofM,andZisthetrainingset.Forrec-tuning,wecan
+Targetnewmovie:IronMan
+leveragetherec-tuningsampleasdescribedinTable2totunethe
+InstructionOutput LLM,similartoalpacatuning.
+TaskOutput: No. •LightweightTuning.However,directlytuningtheLLMiscom-
+putationallyintensiveandtime-consuming.Assuch,weproposeto
+adoptalightweighttuningstrategytoexecutebothalpacatuning
+andrec-tuning.Thecentralpremiseoflightweighttuningisthat
+contemporarylanguagemodelsmaypossessanexcessivenumber
+Input”,andtakethe“TaskOutput”asthecorresponding“Instruc-
+ofparameters,andtheirinformationisconcentratedonalowin-
+tionOutput”,foreachtuningsample.Step4:Instructiontuning
+trinsicdimension[21].Consequently,wecanachievecomparable
+onLLMsbasedontheformattedpairsof“InstructionInput”and
+performancetothatoftheentiremodelbytuningonlyasmallsub-
+“InstructionOutput”.
+setofparameters[20,28,31].Specifically,weemployLoRA[21],
+•Rec-tuningTaskFormulation.WeaimtoutilizeLLM,denoted whichinvolvesfreezingthepre-trainedmodelparametersandin-
+asM,toconstructanLRLM,whichcanpredictwhetheranew troducingtrainablerankdecompositionmatricesintoeachlayer
+itemwillbeenjoyedbyauser.Toachievethisobjective,wedorec- oftheTransformerarchitecturetofacilitatelightweighttuning.
+ommendationtuning(rec-tuning)onLLMswithrecommendation Therefore,byoptimizingrankdecompositionmatrices,wecaneffi-
+data.AsshowninTable2,weformatrecommendationdatainto cientlyincorporatesupplementaryinformationwhilemaintaining
+apatternofinstructiontuning.Webeginbycomposinga“Task theoriginalparametersinafrozenstate.Intotal,thefinallearning
+Instruction”thatdirectsthemodeltodeterminewhethertheuser objectivecanbecomputedas:
+willlikethetargetitembasedontheirhistoricalinteractions,and
+|𝑦|
+torespondwithabinaryanswerof“Yes”or“No”.Toformatthe max ∑︁ ∑︁ log(𝑃Φ+Θ(𝑦𝑡|𝑥,𝑦<𝑡)), (2)
+“TaskInput”,wecategorizetheuser’shistoricallyinteracteditems Θ (𝑥,𝑦)∈Z𝑡=1
+intotwogroupsbasedonratings:theuser’slikeditemsanddis-
+likeditems,whereitemsaresequentiallyrankedbyinteraction
+whereΘistheLoRAparametersandweonlyupdateLoRAparam-
+timeandrepresentedbytextualdescriptions(e.g.,titleandbrief etersduringthetrainingprocess.ThroughLoRA,wecancomplete
+introduction).Besides,“TaskInput”alsoincludesatargetnewitem trainingwithonlyone-thousandthoftheoriginalLLMparameters
+thattheuserhasneverseen.Lastly,wemerge“TaskInstruction” tocompletethetrainingprocess[21]. •BackboneSelection.At
+and“TaskInput”tocreatea“InstructionInput”,andthensetthe present,therearelargeamountsofLLMsreleased,suchasGPT
+expected“InstructionOutput”as‘Yes”or“No”forrec-tuning. series,PaLM,CHinchilla,andLLaMA[3,4,18,46].Amongthese,
+a considerable number of LLMs (such as PaLM and Chinchilla)
+2.2 TALLRecFramework donotprovideaccesstotheirmodelparametersorAPIs,render-
+Inthissubsection,weintroducetheTALLRecframework,which ingthemchallengingtoutilizeforresearchorotherapplications.
+aimstofacilitatetheeffectiveandefficientalignmentofLLMswith Additionally,datasecurityconcernsaresignificantissuesinthe
+recommendationtasks,particularlyinlowGPUmemoryconsump- recommendationfield.Consequently,theutilizationofthird-party
+tionsettings.Specifically,wefirstpresenttwoTALLRectuning APIs (such as ChatGPT and text-davinci-003) to leverage LLMs
+stageswithlightweightimplementation,followedbythebackbone necessitatesfurtherdiscussion.Toreplicatetheissuesthatrequire
+selection.AsshowninFigure2,TALLReccomprisestwotuning considerationinreal-worldrecommendationscenarios,weintend
+stages:alpacatuningandrec-tuning.Theformerstageisthecom- tosimulatethepracticalutilizationofapublicLLMandupdate
+montrainingprocessofLLMthatenhancesLLM’sgeneralization itsparametersforrecommendationpurposes.Aftercarefulcon-
+ability,whilethelatterstageemulatesthepatternofinstruction sideration, we have opted to conduct experiments using LLMs-
+tuningandtunesLLMsfortherecommendationtask. LLaMA,whichispresentlythebest-performingopen-sourceLLM,
+andwhosetrainingdataisalsopubliclyavailable[46].
+•TALLRecTuningStages.Foralpacatuning,weemploythe
+self-instructdatamadeavailablebyAlpaca[45]totraintheLLM.
+3 EXPERIMENTS
+Specifically,weutilizetheconditionallanguagemodelingobjective
+duringthealpacatuning,asexemplifiedintheAlpacarepository1. Inthissection,weconductexperimentstoanswerthefollowing
+researchquestions:
+- RQ1:HowdoesTALLRecperformcomparedwithcurrentLLM-
+1https://github.com/tloen/alpaca-lora. basedandtraditionalrecommendationmodels?
+
+RecSys’23,September18–22,2023,Singapore,Singapore KeqinBao*,JizhiZhang*,YangZhang,WenjieWang,FuliFeng†,andXiangnanHe†
+Lightweight Tuning TALLRecFramework Rec-Tuning
+Samples
+LoRA
+Alpaca Instruction
+LLM Tuning Rec-Tuning Input
+Input LLM Output Output
+K
+Figure2:IllustrationoftheTALLRecframeworkconstructedbyalpacatuningandrec-tuningtwostages.Duringrec-tuning,
+weusetherec-tuningsampleswithinstructioninputandoutputconstructedfromrecommendationdata.Notably,weemploy
+lightweighttuningtechnologytoenhancetheefficiencyofourTALLRecframework.
+- RQ2:HowdothedifferentcomponentsinTALLRecaffectits In-context Lerning on different LLMs: 1) Alpaca-LoRA, 2) Text-
+effectiveness? Davinvi-002,3)Text-Daviniv-003,and4)ChatGPT.Alpaca-LoRAisa
+- RQ3:HowdoesTALLRecperformundercross-domainrecom- modelforreproducingAlpacaresultsoftheLLaMAmodelbyusing
+mendation? LoRAandalpacatuning.ThelatterthreeareGPTseriesmodels
+•Dataset.Weconductexperimentsontwodatasets.Thestatistics fromOpenAI.
+2)Traditionalmethods.Sinceourapproachutilizeshistori-
+andmoredetailscanbefoundinourreleaseddata.
+calinteractionstopredictthesubsequentinteraction,similarto
+- Movie.
+thesequentialrecommendation,weconsiderthefollowingsequen-
+ThisisaprocesseddatasetfromMovieLens100K[12],which
+tialmodels:(i)GRU4Rec[17]isanRNN-basedsequentialrec-
+comprisesuserratingsonmoviesandcomprehensivetextual
+ommender,whichutilizesGRUtoencodehistoricalinteractions.
+descriptions of movies such as “title” and “director”. Because
+(ii)Caser[44]utilizesCNNtoencodehistoricalinteractionse-
+weconductexperimentsinafew-shottrainingsettingthatre-
+quences.(iii)SASRec[26]isaclassictransformer-basedsequen-
+quireslimitedtuningsamples,weprocesstheoriginaldataset
+tialrecommender.(iv)DROS[60]isastate-of-the-artsequential
+bysamplingthemostrecent10,000interactionsandsplitthem
+recommendermodel,whichharnessesdistributionallyrobustop-
+intotraining,validation,andtestingsetswitharatioof8:1:1.To
+timizationforrobustrecommendations.Weusetheversionim-
+constructarec-tuningsample,10interactionspriortothetarget plementedbyGRU4Rec,providedbytheauthors.3Thesequential
+itemareretainedashistoricalinteractions.Following[16,66],
+modelsaboverelyonitemIDfeatureswithoutconsideringtextual
+weonlytreattheinteractionswithratings> 3as“likes”,and
+descriptionsofitems.However,inoursetting,weassumeitem
+thosewithratings≤3as“dislike”.
+textdescriptionsareavailableforLLMtuning.Toensurefaircom-
+- Book.Thisisabookrecommendationdatasetprocessedfrom
+parisons,wefurtherconsidercomparingthefollowingvariantsof
+BookCrossing[71].TheBookCrossingdatasethasuserratings(1-
+GRU4RecandDROS:(v)GRU-BERTisavariantofGRU4Recthat
+10)andtextualdescriptionsofbooks,suchastheinformationof
+incorporatesapre-trainedBERT[7]toencodetextdescriptions.
+‘Book-Author’and‘Book-Title’.Foreachuser,werandomlyselect
+Specifically,BERTencodestextdescriptionsandoutputsaCLS
+aniteminteractedbythisuserasthepredictiontarget,andsam-
+embedding,whichisthenconcatenatedwiththeoriginalIDembed-
+ple10interacteditemsashistoricalinteractions2.Subsequently,
+dingsofGRU4Recastheitemrepresentations.(vi)DROS-BERT
+wepartitionconstructedrec-tuningsamplesintotraining,vali-
+isintegratedwithBERT,similartoGRU-BERT.
+dation,andtestingsetswiththesameratioof8:1:1.Additionally,
+webinarizetheratingsaccordingtoathresholdof5.
+•EvaluationMetric.SinceTALLRecaimstopredictuserprefer-
+enceoveragiventargetitem,i.e.,abinaryclassificationproblem,
+•Few-shotTrainingSetting.Weadoptafew-shottrainingset-
+weadoptapopularevaluationmetricusedinrecommendation:
+ting,whereonlyalimitednumberofsamplesarerandomlyselected
+AreaUndertheReceiverOperatingCharacteristic(AUC).
+fromthetrainingsetformodeltraining.Itisreferredtoas‘𝐾-shot’
+trainingsetting,where𝐾 representsthenumberoftrainingsam- •ImplementationDetails.Toensureuniformsequencelengths,
+plesused.BysettinganextremelysmallvalueforK,suchas64,we weusetheuser’slastinteracteditemtopadthehistoricalinteraction
+couldtestwhetheramethodcanrapidlyacquirerecommendation
+sequenceswithlengths<thethreshold,10.Forallmethods,we
+capabilityfromLLMswithseverelylimitedtrainingdata. optimizeparametersusingAdamwithMSElossandalearningrate
+of1e-3.Wesearchtheweightdecayofallmethodsin{1e-3,1e-4,1e-
+•Baseline.WecompareTALLRecagainstbothLLM-basedandtra-
+5,1e-6,1e-7}.Following[60],regardingspecifichyperparametersof
+ditionalrecommendationmethods.1)ExistingLLM-basedmeth-
+baselines,weadheredtotheiroriginalsettings.ForGRU-BERTand
+odsadoptIn-contextLearningtodirectlygeneraterecommenda-
+DROS-BERT,weutilizeBERTreleasedbyHuggingFace4,while
+tions[13,47].Forafaircomparison,wealignthesemethodswith
+settingthenumberofGRUlayersto4andthehiddensizeto1024for
+TALLRecbyusingthesameinstructions.Specifically,weperform
+aligningwithBERT’sembeddingsize.Lastly,werunallmethods
+2BookCrossinglacksinteractiontimestamps,thuswecanonlyconstructhistorical 3https://github.com/YangZhengyi98/DROS.
+interactionbyrandomsampling. 4https://huggingface.co/bert-base-uncased.
+
+TALLRec:AnEffectiveandEfficientTuningFrameworktoAlignLargeLanguageModelwithRecommendation RecSys’23,September18–22,2023,Singapore,Singapore
+Table3:PerformancecomparisonbetweenconventionalsequentialrecommendationbaselinesandTALLRecunderdifferent
+few-shottrainingsettings.ThereportedresultistheAUCmultipliedby100,withboldfaceindicatingthehighestscore.‡:
+significantlybetterthanallbaselineswitht-test𝑝<0.01.
+Few-shot GRU4Rec Caser SASRec DROS GRU-BERT DROS-BERT TALLRec
+16 49.07 49.68 50.43 50.76 50.85 50.21 67.24‡
+movie 64 49.87 51.06 50.48 51.54 51.65 51.71 67.48‡
+256 52.89 54.20 52.25 54.07 53.44 53.94 71.98‡
+16 48.95 49.84 49.48 49.28 50.07 50.07 56.36
+book 64 49.64 49.72 50.06 49.13 49.64 48.98 60.39‡
+256 49.86 49.57 50.20 49.13 49.79 50.20 64.38‡
+Figure3:Figure(a)showstheperformancecomparisonbetweenLLM-basedbaselines(zero-shotsetting)andoursTALLRec,
+wheretheTALLRecistrainedononly64rec-tuningsamples(i.e.,inthe64-shottrainingsetting).Figure(b)demonstratesthe
+performancetendencyofTALLRec’svariantsandconventionalsequentialrecommendationmethodsw.r.t.thenumberof
+trainingsamplesused,rangingfrom1to256.TALLRechasthreevariants:“AT”foralpacatuningonly,“RT”forrec-tuning
+only,and“TALLRec”forthefullversion.
+fivetimeswithdifferentrandomseedsandreporttheaveraged addingtextualdescriptionscannotenhancethetraditionalrecom-
+results. mendermodelsinthefew-shottrainingsetting.
+3.1 PerformanceComparison(RQ1)
+Weaimtoinvestigatetherecommendationperformanceofvarious
+3.2 AblationStudy(RQ2)
+methodsunderthefew-shottrainingsetting,whichenablesusto
+evaluatehowLLMscanbequicklyadjustedforrecommendation Todemonstratetheeffectivenessofalpacatuningandrec-tuning
+with limitedrec-tuning samples. The evaluation results against inTALLRec,weconductablationstudieswithvarying𝐾underthe
+traditionalmethodsarepresentedinTable3,whilethecomparison 𝐾-shottrainingsetting.Specifically,wecomparetheperformance
+againstLLM-basedmethodsisdepictedinFigure3(a). ofTALLRecwiththatoftwovariants,“AT”and“RT”,where“AT”
+Fromthefigureandtable,wedrawthefollowingobservations: only conducts the alpaca tuning, while “RT” solely implements
+1)OurmethodsignificantlyoutperformsbothtraditionalandLLM- rec-tuning.Byvarying𝐾,wefurtherinvestigatetheimpactofthe
+basedmethods,verifyingthesuperiorityoftuningLLMviaour numberoftrainingsamples.
+TALLRecframework.TALLRecsuccessfullyunlockstheknowl- WesummarizetheresultsinFigure3(b),fromwhichwehave
+edge and generalization capabilities of LLMs for recommenda- the following observations: 1) The performance of “AT” signifi-
+tions.2)LLM-basedmethodsperformsimilarlytorandomguessing cantlydeclinescomparedtothatof“RT”andTALLRec,indicating
+(AUC≈0.5).However,theLLMstrainedviaTALLRecachievessig- the essential effect of rec-tuning, which effectively inspires the
+nificantimprovements.Theseresultsdemonstrateaconsiderable LLM’srecommendationcapability2)Withlimitedrec-tuningsam-
+gapbetweenrecommendationandlanguagetasks,showingthe ples (≤ 128), TALLRec generally outperforms “RT”, confirming
+importanceofusingrecommendationdataforrec-tuningonLLMs. thatalpacatuningcanenhancetheLLM’sgeneralizationability
+3)Traditionalrecommendermethodsconsistentlyyieldinferior onnewtasks,especiallywhenthetrainingdatainthenewtasks
+performanceunderourfew-shottrainingsettings,implyingthat areinsufficient.Asthequantityofrec-tuningsamplesgrows,the
+traditionalmethodsareincapableofquicklylearningtherecom- resultsofTALLRecand“RT”becomecloser.Thismakessense,as
+mendationcapabilitywithlimitedtrainingsamples.4)GRU-BERT thesignificanceofgeneralizationabilitiesderivedfromothertasks
+andDROS-BERTdonotshowsignificantimprovementovertheir diminisheswhenthereisanampleamountoftrainingdatafor
+backendmodels,GRU4RecandDROS.Thisindicatesthatpurely thenewtasks.3)Withtheincreaseofrec-tuningsamplenumber,
+
+RecSys’23,September18–22,2023,Singapore,Singapore KeqinBao*,JizhiZhang*,YangZhang,WenjieWang,FuliFeng†,andXiangnanHe†
+Figure4:Cross-domaingeneralizationperformanceofLRLMstrainedviaTALLRecusingBookdata(TALLRec(Book)),Movie
+data(TALLRec(Movie)),andboth(TALLRec(Both)).TheleftfigureshowsthetestingresultsontheMoviedatasetwithvarying
+numbersofrec-tuningsamples,whiletherightfigureshowsthetestingresultsontheBookdataset.
+TALLRecconsistentlyperformsbetterthanthebaselines.Itisat- thispaperisorthogonalabouthowtoadaptlargelanguagemod-
+tributedtorec-tuning,whichcanutilizelimitedsamplestoinspire elstorecommendationtasks.Inrecommendationsystems,there
+theLLM’srecommendationcapability. iscurrentlylittleresearchonapplyingLLMsinrecommendation
+scenarios.ThoseworksutilizetheinteractionabilityofGPT3.5
+series models and apply In-context Learning [13, 47]. In detail,
+3.3 Cross-domainGeneralizationAnalyses
+Chat-Rec[13]endeavorstoharnesstheinteractioncapabilitiesof
+(RQ3)
+ChatGPTandlinktheChatGPTwithtraditionalrecommendation
+TofurtherinvestigatethegeneralizationabilityofTALLRec,wecon- models(e.g.MF[27],LightGCN[16])toformulateaconversational
+ductexperimentsoncross-domainrecommendations.Specifically, recommendationsystem.NIR[47]sharesasimilarconceptwith
+wetuneTALLRecwithdifferentrec-tuningsamples,including1) Chat-Rec,whichemploysconventionalrecommendationmodels
+“TALLRec(Book)”,onlyusingthesamplesfromtheBookdataset;2) togeneratecandidateitemssubjectedtoathree-stagemulti-step
+“TALLRec(Movie)”,solelyusingsamplesfromtheMoviedataset; promptingprocessforre-ranking.
+and3)“TALLRec(Both)”,tunedwithboththeBookandMovie
+•SequentialRecommendation.Oursetupisclosetothesequen-
+samples.Wevary𝐾 in{16,64,258}underthefew-shottraining
+tialrecommendation,whichaimstoinfertheuser’snextinteraction
+setting,andevaluatethemodelsonthetestingsetsofBookand
+basedonusers’historicalinteractionsequences[11,50].Intheearly
+Movie,respectively.TheresultsaresummarizedinFigure4,from
+time,theMarkovchainplaysanimportantroleinsequentialrecom-
+whichwecanfind:1)TALLRecdemonstratesremarkablecross-
+mendation[15,34,40,49].Recently,deeplearning-basedmethods
+domaingeneralizationability.Forinstance,aftertuningonlyon
+havebecomemainstream.Extensiveworkusingdifferentkindsof
+moviesamples,“TALLRec(Movie)”exhibitsgoodperformanceon
+neuralnetworkstructures,likeRNN[5,9,17],CNN[44,59,62],
+Bookdata,comparableto“TALLRec(Book)”.Thisisimpressiveand
+andattention[26,58,65],tomodeltheuserinteractionsequences.
+suggeststhatTALLRechascross-domaingeneralizationabilityin-
+However,limitedbyonlyusingIDstorepresentusersanditems,
+steadofonlyfittingasingledomainliketraditionalrecommenders.
+suchworkcannotfastlyadaptandgeneralizetonewscenarios.
+2)“TALLRec(Both)”surpasses“TALLRec(Movie)”and“TALLRec
+Thus,someworksfocusonthegeneralizationabilityofsequential
+(Book)”ontwotestingsetswhenthenumberofrec-tuningsamples
+recommendationmodelsbypre-training[35,61],dataaugmenta-
+exceeds64.ThisfindingindicatesthatTALLReccanseamlessly
+tion[38,39,51,57],debiasing[8,52,67,70],androbustoptimiza-
+integratedatafromdifferentdomainstoenhanceitsgeneralization
+tion[55,60].However,theyignorethestronggeneralizationability
+performance.Infuturework,itispromisingtopre-trainTALL-
+ofexistingLLMs,leadingtoinadequateexploration.
+Recwithlarge-scalerecommendationdatafromheterogeneous
+domains.
+5 CONCLUSION
+WiththeadvancementofLLMs,peoplearegraduallyrecognizing
+4 RELATEDWORK
+theirpotentialinrecommendationsystems[30,63,64].Inthiswork,
+•LMsforRecommendation.Therehavebeenseveralattempts weexploredthefeasibilityofusingLLMsfortherecommendation.
+tointegratelanguagemodels(LMs)withrecommendationsystems. OurinitialfindingsrevealthateventheexistingbestLLMmodelsdo
+DespitetheincorporationofLMs[14,29],someattemptspersistin notperformwellinrecommendationtasks.Toaddressthisissue,we
+utilizingtraditionaluser/itemIDstorepresentusers/items.Thereby, proposedaTALLRecframeworkthatcanefficientlyalignLLMwith
+theydisregardthesemanticunderstandingcapabilitiesofLMs,such recommendationtasksthroughtwotuningstages:alpacatuning
+asreviews,whichotherworkhasincorporatedthelanguageinfor- and rec-tuning. Our experimental results demonstrate that the
+mationaspartoftheusers/itemsembedding[19].Inaddition,other LLMstrainedusingourTALLRecframeworkoutperformtraditional
+methodseitherutilizeanundisclosedmodelthatalreadypossesses modelsandexhibitstrongcross-domaingeneralizationabilities.
+preliminaryrecommendationcapabilities[6].oremploysmallmod- Moving forward, we plan to explore more efficient methods to
+elstotrainonlarge-scaledownstreamtaskdata[68].Moreover, activate the recommendation ability of larger models and tune
+theaforementionedmodelsarealsolimitedtosmallmodels,while LLMstohandlemultiplerecommendationtaskssimultaneously.
+
+TALLRec:AnEffectiveandEfficientTuningFrameworktoAlignLargeLanguageModelwithRecommendation RecSys’23,September18–22,2023,Singapore,Singapore
+ACKNOWLEDGMENTS
+[25] MatthewJin,SyedShahriar,MicheleTufano,XinShi,ShuaiLu,NeelSundaresan,
+andAlexeySvyatkovskiy.2023.InferFix:End-to-EndProgramRepairwithLLMs.
+ThisworkissupportedbytheNationalNaturalScienceFoundation
+(2023).arXiv:2303.07263
+ofChina(62272437),andtheCCCDKeyLabofMinistryofCulture [26] Wang-ChengKangandJulianMcAuley.2018.Self-attentivesequentialrecom-
+andTourism. mendation.InICDM.197–206.
+[27] YehudaKoren,RobertBell,andChrisVolinsky.2009.Matrixfactorizationtech-
+niquesforrecommendersystems.Computer42,8(2009),30–37.
+REFERENCES [28] BrianLester,RamiAl-Rfou,andNoahConstant.2021.ThePowerofScalefor
+Parameter-EfficientPromptTuning.InProceedingsofthe2021Conferenceon
+[1] QingyaoAi,TingBai,ZhaoCao,YiChang,JiaweiChen,ZhuminChen,Zhiyong EmpiricalMethodsinNaturalLanguageProcessing,EMNLP,7-11November,2021.
+Cheng,ShoubinDong,ZhichengDou,FuliFeng,etal.2023.InformationRetrieval AssociationforComputationalLinguistics,3045–3059.
+MeetsLargeLanguageModels:AStrategicReportfromChineseIRCommunity. [29] LeiLi,YongfengZhang,andLiChen.2023. Personalizedpromptlearningfor
+arXivpreprintarXiv:2307.09751(2023). explainablerecommendation. ACMTransactionsonInformationSystems41,4
+[2] GregBrockman,MiraMurati,PeterWelinder,andOpenAI.2022.OpenAIAPI. (2023),1–26.
+[3] TomBrown,BenjaminMann,NickRyder,etal.2020. Languagemodelsare [30] RuyuLi,WenhaoDeng,YuCheng,ZhengYuan,JiaqiZhang,andFajieYuan.
+few-shotlearners.NeurIPS33(2020),1877–1901. 2023.ExploringtheUpperLimitsofText-BasedCollaborativeFilteringUsing
+[4] AakankshaChowdhery,SharanNarang,JacobDevlin,etal.2022.Palm:Scaling LargeLanguageModels:DiscoveriesandInsights.arXivpreprintarXiv:2305.11700
+languagemodelingwithpathways.arXivpreprintarXiv:2204.02311(2022). (2023).
+[5] QiangCui,ShuWu,QiangLiu,WenZhong,andLiangWang.2020.MV-RNN:A [31] XiangLisaLiandPercyLiang.2021. Prefix-Tuning:OptimizingContinuous
+Multi-ViewRecurrentNeuralNetworkforSequentialRecommendation.IEEE PromptsforGeneration.InACL/IJCNLP2021,August1-6,2021.Associationfor
+Trans.Knowl.DataEng.32,2(2020),317–331. ComputationalLinguistics,4582–4597.
+[6] ZeyuCui,JianxinMa,ChangZhou,JingrenZhou,andHongxiaYang.2022.M6- [32] PercyLiang,RishiBommasani,TonyLee,etal.2022. Holisticevaluationof
+Rec:GenerativePretrainedLanguageModelsareOpen-EndedRecommender languagemodels.arXivpreprintarXiv:2211.09110(2022).
+Systems.arXivpreprintarXiv:2205.08084(2022). [33] XiVictoriaLin,TodorMihaylov,etal.2021.Few-shotlearningwithmultilingual
+[7] JacobDevlin,Ming-WeiChang,KentonLee,andKristinaToutanova.2019.BERT: languagemodels.arXivpreprintarXiv:2112.10668(2021).
+Pre-trainingofDeepBidirectionalTransformersforLanguageUnderstanding.In [34] TariqMahmoodandFrancescoRicci.2007.Learningandadaptivityininteractive
+NAACL.AssociationforComputationalLinguistics,4171–4186. recommendersystems.InProceedingsoftheninthinternationalconferenceon
+[8] SihaoDing,FuliFeng,XiangnanHe,JinqiuJin,WenjieWang,YongLiao,and Electroniccommerce.75–84.
+YongdongZhang.2022.InterpolativeDistillationforUnifyingBiasedandDebi- [35] YaboNi,DanOu,ShichenLiu,etal.2018.PerceiveYourUsersinDepth:Learning
+asedRecommendation.InSIGIR’22,July11-15,2022.ACM,40–49. UniversalUserRepresentationsfromMultipleE-commerceTasks.InKDD2018,
+[9] TimDonkers,BenediktLoepp,andJürgenZiegler.2017.Sequentialuser-based August19-23,2018.ACM,596–605.
+recurrentneuralnetworkrecommendations.InProceedingsoftheeleventhACM [36] LongOuyangetal.2022.Traininglanguagemodelstofollowinstructionswith
+conferenceonrecommendersystems.152–160. humanfeedback.NeurIPS35(2022),27730–27744.
+[10] DannyDriess,FeiXia,MehdiS.M.Sajjadi,etal.2023.PaLM-E:AnEmbodied [37] BaolinPengetal.2023.InstructionTuningwithGPT-4.(2023).arXiv:2304.03277
+MultimodalLanguageModel.abs/2303.03378(2023).arXiv:2303.03378 [38] RuihongQiu,ZiHuang,HongzhiYin,andZijianWang.2021.ContrastiveLearn-
+[11] HuiFang,DanningZhang,YihengShu,andGuibingGuo.2020.DeepLearning ingforRepresentationDegenerationProbleminSequentialRecommendation.
+forSequentialRecommendation:Algorithms,InfluentialFactors,andEvaluations. (2021).arXiv:2110.05730
+ACMTrans.Inf.Syst.39,1(2020),10:1–10:42. [39] RuihongQiu,ZiHuang,HongzhiYin,andZijianWang.2022.ContrastiveLearn-
+[12] F.MaxwellandJosephA.Konstan.2015.TheMovieLensDatasets:Historyand ingforRepresentationDegenerationProbleminSequentialRecommendation.In
+Context..InACMTransactionsonInteractiveIntelligentSystems(TiiS). WSDM’22:TheFifteenthACMInternationalConferenceonWebSearchandData
+[13] YunfanGaoetal.2023.Chat-REC:TowardsInteractiveandExplainableLLMs- Mining,February21-25,2022.ACM,813–823.
+AugmentedRecommenderSystem.arXivpreprint:2303.14524(2023). [40] SteffenRendle,ChristophFreudenthaler,andLarsSchmidt-Thieme.2010.Factor-
+[14] ShijieGeng,ShuchangLiu,ZuohuiFu,YingqiangGe,andYongfengZhang.2022. izingpersonalizedmarkovchainsfornext-basketrecommendation.InProceedings
+Recommendationaslanguageprocessing(rlp):Aunifiedpretrain,personalized ofthe19thinternationalconferenceonWorldwideweb.811–820.
+prompt&predictparadigm(p5).InProceedingsofthe16thACMConferenceon [41] VictorSanh,AlbertWebson,ColinRaffel,etal.2021.Multitaskpromptedtraining
+RecommenderSystems.299–315. enableszero-shottaskgeneralization.arXiv:2110.08207(2021).
+[15] RuiningHeandJulianMcAuley.2016. Fusingsimilaritymodelswithmarkov [42] TimoSchick,JaneDwivedi-Yu,RobertoDessì,RobertaRaileanu,MariaLomeli,
+chainsforsparsesequentialrecommendation.In2016IEEE16thinternational LukeZettlemoyer,NicolaCancedda,andThomasScialom.2023.Toolformer:Lan-
+conferenceondatamining(ICDM).IEEE,191–200. guagemodelscanteachthemselvestousetools.arXivpreprintarXiv:2302.04761
+[16] XiangnanHe,KuanDeng,XiangWang,YanLi,YongdongZhang,andMeng (2023).
+Wang.2020.Lightgcn:Simplifyingandpoweringgraphconvolutionnetworkfor [43] DhruvShah,BlazejOsinski,BrianIchter,andSergeyLevine.2022. LM-Nav:
+recommendation.InSIGIR’20.639–648. RoboticNavigationwithLargePre-TrainedModelsofLanguage,Vision,and
+[17] BalázsHidasietal.2016.Session-basedRecommendationswithRecurrentNeural Action.InCoRL2022,14-18December2022(ProceedingsofMachineLearning
+Networks.InICLR. Research,Vol.205).PMLR,492–504.
+[18] JordanHoffmannetal.2022.Trainingcompute-optimallargelanguagemodels. [44] JiaxiTangandKeWang.2018.Personalizedtop-nsequentialrecommendation
+arXivpreprintarXiv:2203.15556(2022). viaconvolutionalsequenceembedding.InWSDM.565–573.
+[19] YupengHou,ShanleiMu,WayneXinZhao,YaliangLi,BolinDing,andJi-Rong [45] RohanTaori,IshaanGulrajani,TianyiZhang,YannDubois,XuechenLi,Carlos
+Wen.2022. TowardsUniversalSequenceRepresentationLearningforRecom- Guestrin,PercyLiang,andTatsunoriB.Hashimoto.2023.StanfordAlpaca:An
+menderSystems.InProceedingsofthe28thACMSIGKDDConferenceonKnowledge Instruction-followingLLaMAmodel.
+DiscoveryandDataMining.585–593. [46] HugoTouvronetal.2023.LlaMA:Openandefficientfoundationlanguagemodels.
+[20] NeilHoulsby,AndreiGiurgiu,StanislawJastrzebski,etal.2019. Parameter- arXivpreprintarXiv:2302.13971(2023).
+EfficientTransferLearningforNLP.InProceedingsofthe36thInternational [47] LeiWangetal.2023.Zero-ShotNext-ItemRecommendationusingLargePre-
+ConferenceonMachineLearning,ICML2019,9-15June2019,Vol.97.2790–2799. trainedLanguageModels.arXivpreprintarXiv:2304.03153(2023).
+[21] EdwardJ.Hu,YelongShen,PhillipWallis,ZeyuanAllen-Zhu,YuanzhiLi,Shean [48] LiangWang,NanYang,andFuruWei.2023.Query2doc:QueryExpansionwith
+Wang,LuWang,andWeizhuChen.2022.LoRA:Low-RankAdaptationofLarge LargeLanguageModels.(2023).arXiv:2303.07678
+LanguageModels.InTheTenthInternationalConferenceonLearningRepresenta- [49] PengfeiWang,JiafengGuo,YanyanLan,JunXu,ShengxianWan,andXueqi
+tions,ICLR2022,VirtualEvent,April25-29,2022. Cheng.2015. Learninghierarchicalrepresentationmodelfornextbasketrec-
+[22] SrinivasanIyer,XiVictoriaLin,RamakanthPasunuru,etal.2022. OPT-IML: ommendation.InProceedingsofthe38thInternationalACMSIGIRconferenceon
+ScalingLanguageModelInstructionMetaLearningthroughtheLensofGeneral- ResearchandDevelopmentinInformationRetrieval.403–412.
+ization.arXivpreprintarXiv:2212.12017(2022). [50] Shoujin Wang, Liang Hu, Yan Wang, Longbing Cao, Quan Z. Sheng, and
+[23] JoelJang,SeungoneKim,SeonghyeonYe,DoyoungKim,LajanugenLogeswaran, MehmetA.Orgun.2019.SequentialRecommenderSystems:Challenges,Progress
+MoontaeLee,KyungjaeLee,andMinjoonSeo.2023. ExploringtheBene- andProspects.InIJCAI2019,Macao,China,August10-16,2019.ijcai.org,6332–
+fitsofTrainingExpertLanguageModelsoverInstructionTuning. (2023). 6338.
+arXiv:2302.03202 [51] ZiyangWang,HuoyuLiu,WeiWei,YueHu,Xian-LingMao,ShaojianHe,Rui
+[24] VitorJeronymo,LuizHenriqueBonifacio,HugoAbonizio,MarziehFadaee, Fang,andDangyangChen.2022.Multi-levelContrastiveLearningFramework
+RobertodeAlencarLotufo,JakubZavrel,andRodrigoFrassettoNogueira.2023. forSequentialRecommendation.(2022).arXiv:2208.13007
+InPars-v2:LargeLanguageModelsasEfficientDatasetGeneratorsforInforma- [52] ZhenleiWang,ShiqiShen,ZhipengWang,BoChen,XuChen,andJi-RongWen.
+tionRetrieval.abs/2301.01820(2023).arXiv:2301.01820 2022.UnbiasedSequentialRecommendationwithLatentConfounders.InWWW
+
+RecSys’23,September18–22,2023,Singapore,Singapore KeqinBao*,JizhiZhang*,YangZhang,WenjieWang,FuliFeng†,andXiangnanHe†
+’22:TheACMWebConference2022,VirtualEvent,Lyon,France,April25-29,2022. [63] ZhengYuan,FajieYuan,YuSong,YouhuaLi,JunchenFu,FeiYang,Yunzhu
+ACM,2195–2204. Pan,andYongxinNi.2023.WheretoGoNextforRecommenderSystems?ID-
+[53] JasonWei,MaartenBosma,VincentYZhao,KelvinGuu,AdamsWeiYu,Brian vs.Modality-basedRecommenderModelsRevisited.InProceedingsofthe46th
+Lester,NanDu,AndrewMDai,andQuocVLe.2021.Finetunedlanguagemodels InternationalACMSIGIRConferenceonResearchandDevelopmentinInformation
+arezero-shotlearners.arXivpreprintarXiv:2109.01652(2021). Retrieval,SIGIR2023,Taipei,Taiwan,July23-27,2023,Hsin-HsiChen,Wei-Jou(Ed-
+[54] JasonWei,YiTay,RishiBommasani,etal.2022. Emergentabilitiesoflarge ward)Duh,Hen-HsenHuang,MakotoP.Kato,JosianeMothe,andBarbaraPoblete
+languagemodels.arXivpreprintarXiv:2206.07682(2022). (Eds.).ACM,2639–2649. https://doi.org/10.1145/3539618.3591932
+[55] HongyiWen,XinyangYi,TianshengYao,JiaxiTang,LichanHong,andEdH.Chi. [64] JizhiZhang,KeqinBao,YangZhang,WenjieWang,FuliFeng,andXiangnan
+2022.Distributionally-robustRecommendationsforImprovingWorst-caseUser He.2023.Ischatgptfairforrecommendation?evaluatingfairnessinlargelan-
+Experience.InWWW’22:TheACMWebConference2022,VirtualEvent,Lyon, guagemodelrecommendation.InProceedingsofthe17thACMConferenceon
+France,April25-29,2022.ACM,3606–3610. RecommenderSystems(RecSys’23).AssociationforComputingMachinery.
+[56] TedXiao,HarrisChan,PierreSermanet,AyzaanWahid,AnthonyBrohan,Karol [65] TingtingZhang,PengpengZhao,YanchiLiu,etal.2019.Feature-levelDeeper
+Hausman,SergeyLevine,andJonathanTompson.2022.RoboticSkillAcquisition Self-AttentionNetworkforSequentialRecommendation.InProceedingsofthe
+viaInstructionAugmentationwithVision-LanguageModels. abs/2211.11736 Twenty-EighthInternationalJointConferenceonArtificialIntelligence,IJCAI2019,
+(2022).arXiv:2211.11736 August10-16,2019.ijcai.org,4320–4326.
+[57] XuXie,FeiSun,ZhaoyangLiu,ShiwenWu,JinyangGao,JiandongZhang,Bolin [66] YangZhangetal.2023.ReformulatingCTRPrediction:LearningInvariantFeature
+Ding,andBinCui.2022.ContrastiveLearningforSequentialRecommendation. InteractionsforRecommendation.(2023).
+In38thIEEEInternationalConferenceonDataEngineering,ICDE2022,Kuala [67] YangZhang,FuliFeng,XiangnanHe,TianxinWei,ChonggangSong,Guohui
+Lumpur,Malaysia,May9-12,2022.IEEE,1259–1273. Ling,andYongdongZhang.2021.CausalInterventionforLeveragingPopularity
+[58] ChengfengXu,JianFeng,PengpengZhao,FuzhenZhuang,DeqingWang,Yanchi BiasinRecommendation.InSIGIR’21,July11-15,2021.ACM,11–20.
+Liu,andVictorS.Sheng.2021.Long-andshort-termself-attentionnetworkfor [68] ZizhuoZhangandBangWang.2023.PromptLearningforNewsRecommendation.
+sequentialrecommendation.Neurocomputing423(2021),580–589. arXivpreprintarXiv:2304.05263(2023).
+[59] AnYan,ShuoCheng,Wang-ChengKang,MengtingWan,andJulianJ.McAuley. [69] WayneXinZhao,KunZhou,JunyiLi,TianyiTang,XiaoleiWang,YupengHou,
+2019.CosRec:2DConvolutionalNeuralNetworksforSequentialRecommenda- YingqianMin,BeichenZhang,JunjieZhang,ZicanDong,YifanDu,ChenYang,
+tion.InCIKM2019,November3-7,2019.ACM,2173–2176. YushuoChen,ZhipengChen,JinhaoJiang,RuiyangRen,YifanLi,XinyuTang,
+[60] ZhengyiYangetal.2023.AGenericLearningFrameworkforSequentialRecom- ZikangLiu,PeiyuLiu,Jian-YunNie,andJi-RongWen.2023.ASurveyofLarge
+mendationwithDistributionShifts.(2023). LanguageModels.CoRRabs/2303.18223(2023). https://doi.org/10.48550/arXiv.
+[61] FajieYuan,XiangnanHe,AlexandrosKaratzoglou,andLiguangZhang.2020. 2303.18223arXiv:2303.18223
+Parameter-EfficientTransferfromSequentialBehaviorsforUserModelingand [70] YuZhengetal.2021.DisentanglingUserInterestandConformityforRecom-
+Recommendation.InSIGIR2020,July25-30,2020.ACM,1469–1478. mendationwithCausalEmbedding.InWWW’21.2980–2991.
+[62] FajieYuan,AlexandrosKaratzoglou,IoannisArapakis,JoemonM.Jose,and [71] Cai-NicolasZiegler,SeanM.McNee,JosephA.Konstan,andGeorgLausen.2005.
+XiangnanHe.2019.ASimpleConvolutionalGenerativeNetworkforNextItem ImprovingRecommendationListsthroughTopicDiversification.InProceedings
+Recommendation.InWSDM2019,February11-15,2019.ACM,582–590. ofthe14thInternationalConferenceonWorldWideWeb(WWW’05).Association
+forComputingMachinery,22–32.

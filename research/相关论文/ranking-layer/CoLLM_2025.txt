@@ -1,0 +1,1000 @@
+5202
+nuJ
+41
+]RI.sc[
+3v88491.0132:viXra
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 1
+CoLLM: Integrating Collaborative Embeddings
+into Large Language Models for
+Recommendation
+Yang Zhang, Fuli Feng, Jizhi Zhang, Keqin Bao, Qifan Wang and Xiangnan He
+✦
+Abstract—LeveragingLargeLanguageModelsasrecommenders,re-
+Warm AUC (%) Cold AUC (%)
+ferredtoasLLMRec,isgainingtractionandbringsnoveldynamicsfor
+modeling user preferences, particularly for cold-start users. However, 78 64
+existingLLMRecapproachesprimarilyfocusontextsemanticsandover- 74
+look the crucial aspect of incorporating collaborative information from 51
+user-item interactions, leading to potentially sub-optimal performance MF TALLRec MF TALLRec
+in warm-start scenarios. To ensure superior recommendations across
+both warm and cold scenarios, we introduce CoLLM, an innovative
+Fig.1:AdemonstrationofLLMRecmethod(TALLRec[12])
+LLMRecapproachthatexplicitlyintegratescollaborativeinformationfor
+performance compared to conventional methods (MF [14])
+recommendations.CoLLMtreatscollaborativeinformationasadistinct
+inwarmandcoldscenariosonAmazon-Book[15]data.
+modality,directlyencodingitfromwell-establishedtraditionalcollabora-
+tivemodels,andthentunesamappingmoduletoalignthiscollaborative
+informationwiththeLLM’sinputtexttokenspaceforrecommendations.
+By externally integrating traditional models, CoLLM ensures effective instance, the world knowledge and context comprehension
+collaborativeinformationmodelingwithoutmodifyingtheLLMitself,pro- abilities of LLMs could enhance item understanding and
+vidingtheflexibilitytoadoptdiversecollaborativeinformationmodeling user modeling, particularly for cold items/users [9]. This
+mechanisms.ExtensiveexperimentationvalidatesthatCoLLMadeptly
+anticipationopensupanexcitingnewdirection:leveraging
+integrates collaborative information into LLMs, resulting in enhanced
+LLMs as recommenders (LLMRec) [10, 11], which exhibits
+recommendation performance. Our implementations are available in
+the potential to become a transformative paradigm for rec-
+Github:https://github.com/zyang1580/CoLLM.
+ommendation[10,12,13].
+IndexTerms—RecommenderSystem,LargeLanguageModel,Collab- To leverage LLMs as recommenders, pioneering studies
+orativeInformation have relied on In-Context Learning [2], which involves
+directly asking LLMs to make recommendations by using
+natural language-based prompts [16–19]. However, most
+1 INTRODUCTION
+empirical findings indicate that the original LLMs them-
+LARGE Language Models (LLMs) like GPT3 [1, 2] and selves struggle to provide accurate recommendations, of-
+LLaMA [3] have made rapid advancements, show- ten due to a lack of specific recommendation task train-
+casing remarkable capabilities in context comprehension, ing [12, 20, 21]. To address this challenge, increasing ef-
+reasoning, generalization,and modeling worldknowledge, forts have been devoted to further fine-tuning LLMs using
+among others [4]. These exceptional proficiencies have relevant recommendation data [12, 19–21]. Nevertheless,
+sparked intense interest and enthusiasm for exploring and despite incorporating tuning to learn the recommendation
+utilizing LLMs across diverse fields and disciplines [5–8]. task,thesemethodscouldstillfallshortofsurpassingwell-
+Recommender systems, as a core engine for personalized trainedconventionalrecommendermodels,particularlyfor
+information filtering on the web, are also anticipated to warm users/items, as demonstrated in recent works [22]
+reapsignificantbenefitsfromthedevelopmentofLLMs.For andFigure1.
+WearguethattheprimarylimitationofexistingLLMRec
+This work is supported by the National Key Research and Development
+methodsistheirinadequatemodelingoflocalcollaborative
+Program of China (2022YFB3104701) and the National Natural Science
+FoundationofChina(U24B20180,62121002).(Correspondingauthors:Fuli information implied within the co-occurrence patterns in
+Feng;XiangnanHe.) user-item interactions. These methods represent users and
+Yang Zhang, Fuli Feng, Jizhi Zhang, and Keqin Bao are
+items using text tokens, relying predominantly on text se-
+with the University of Science and Technology of China,
+China. Email: zyang1580@gmail.com, fulifeng93@gmail.com, mantics for recommendations, which inherently fall short
+cdzhangjizhi@mail.ustc.edu.cn,baokq@mail.ustc.edu.cn. of capturing collaborative information. For example, two
+QifanWangiswithMetaAI,USA.Email:wqfcr618@gmail.com.
+items with similar text descriptions might possess distinct
+XiangnanHeiswiththeMoEKeyLabofBrain-inspiredIntelligentPerception
+collaborative information if consumed by different users,
+andCognition,UniversityofScienceandTechnologyofChina,China.Email:
+xiangnanhe@gmail.com. yet this difference often goes unaccounted for due to the
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 2
+textual similarity. Nevertheless, collaborative information 2 RELATED WORK
+between users and items often proves beneficial for rec-
+Inthissection,wefirstdiscusstherelatedworkonLLMRec.
+ommendations, especially for ones with rich interactions
+Subsequently, given our focus on integrating collaborative
+(i.e., warm ones) [23]. Ignoring such information can lead
+informationintoLLMsasanadditionalmodality,wewould
+to suboptimal performance. Hence, we introduce a novel
+brieflydiscusstherelatedworkonmultimodalLLM.
+research problem: how can we efficiently integrate collabo-
+rativeinformationintoLLMstooptimizetheirperformance
+forbothwarmandcoldusers/items? 2.1 LLMRec
+To solve the issue, we propose explicitly modeling col- Recently,withtheremarkableemergenceofLLMs,therehas
+laborative information in LLMs. Drawing from the expe- beenagradualexplorationofintegratingthesesophisticated
+rience of classic collaborative filtering with latent factor models with recommender systems [10, 11, 29, 30]. Some
+models (e.g., Matrix Factorization) [14, 24, 25], a straight- researchersemploythemethodologyofIn-contextLearning,
+forward solution is introducing additional tokens and cor- relyingonthenaturallanguagecomprehensionandgenera-
+responding embeddings in LLMs to represent users/items, tioncapabilitiesofLLMsforrecommendationpurposes[18].
+akintotherolesplayedbyuser/itemembeddingsinlatent Among them, Chat-Rec [18] facilitates the recommenda-
+factor models. This enables the possibility of encoding col- tion process by harnessing the conversational capabilities
+laborative information when using these embeddings to fit of ChatGPT. Besides, researchers are also endeavoring to
+interaction data, similar to MF. However, directly adding facilitate the acquisition of recommendation capabilities
+tokenembeddingswoulddecreasescalabilityforlarge-scale in LLMs through in-context learning approaches [17, 31].
+recommendations and increase LLMs’ tokenization redun- However, because the objective of LLM pre-training is not
+dancy,resultinginaloweroverallinformationcompression geared towards recommendation, these methods often ex-
+rate [26]. This reduced compression rate is particularly hibit suboptimal performance. To alleviate this issue, some
+significantconsideringthatcollaborativeinformationistyp- researchershaveemployedinstructiontuningusingempir-
+ically low-rank, and it could ultimately make prediction ical recommendation data to enhance the recommendation
+tasks (including recommendation) more challenging for capabilitiesoftheLLM[12,21],andachievedcommendable
+LLMs[26,27].Moreover,thismethodlackstheflexibilityto performance. Additionally, [32, 33] either employed fine-
+incorporatemoreadvancedmodelingmechanisms,suchas tuning techniques or utilized prompting on the LLM to
+explicitly capturing high-order collaborative relationships enable it to acquire proficiency in using diverse tools for
+likeLightGCN[28]. facilitatingconversationalrecommendations.
+In this light, to effectively enhance LLM with collab- Although the above works demonstrate the feasibility
+orative information in a lightweight and flexible manner, of tuning LLMs using recommendation data, they still fall
+weproposeCoLLM,anewmethodthattreatscollaborative shortincertainsettingscomparedtotraditionalmodels[22].
+information as a separate modality and introduces it into This can be attributed to the fact that LLMs often heav-
+LLM by directly mapping it from a (well-trained) conven- ily rely on semantic priors and tend to overlook collab-
+tional collaborative model using a Multilayer Perceptron orative information [34]. To our knowledge, BIGRec [20]
+(MLP).CoLLMemploysatwo-steptuningprocedure:first, is the only work that addresses this issue beyond ours.
+fine-tuning LLM in the LoRA manner using language in- However,BIGRectacklestheproblembyensemblingLLMs
+formation exclusively to learn the recommendation task, with collaborative models, rather than integrating collabo-
+and then specially tuning the mapping module to make rative information into the LLM generation process, which
+the mapped collaborative information understandable and limits the full potential of LLMs. Besides, two concurrent
+usable for LLM’s recommendation via considering the in- works[35,36]exploretheuseofcollaborativeembeddings;
+formation when fitting recommendation data. By align- however, they focus on directly learning ID embeddings in
+ing knowledge from the conventional model with LLMs, the LLM space. In contrast, we focus on mapping collab-
+CoLLM effectively incorporates collaborative information orative embeddings into the LLM space. When extending
+intoLLMs.Thisapproachmaintainsscalabilitycomparable to the field of language models (LMs) for recommenda-
+to the original LLMs while also providing flexibility in tion, some works have concentrated on combining LMs
+implementing various collaborative information modeling with collaborative models [23, 37]. Typically, they use the
+mechanismsbyadaptingthechoiceofconventionalmodels. LM’s semantic information as a feature for the collabo-
+rative model. However, these approaches may face issues
+Themaincontributionsaresummarizedasfollows:
+related to forgetting semantic information. In contrast, our
+• We highlight the significance of incorporating collabora- approach centers around LLM and still relies on the LLM
+tive information modeling into LLMs for recommenda- itself to seamlessly integrate semantic and collaborative
+tion, so as to make LLMRec perform well in both warm information,ratherthanthereverse.
+andcoldusers/items.
+• We introduce CoLLM, a novel method that effectively
+2.2 MultimodalLLM
+integrates collaborative information into LLMs by har-
+nessing the capability of external traditional models to AmongtheprogressinthefieldofLLM,theendeavorsthat
+capturetheinformation. resonatemostcloselywithourworkinvolvetheexploration
+• We conduct extensive experiments on two real-world of multimodal LLMs [38–41]. For instance, MiniGPT4 [39]
+datasets. Extensive results demonstrate the effectiveness combines a frozen visual encoder with a frozen advanced
+ofourproposal. languagemodel,revealingthataligningvisualfeatureswith
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 3
+largelanguagemodelsenablesadvancedmulti-modalcapa- where u ∈ R1×d1 denotes the user’s representation with
+bilitieslikegeneratingdetailedimagedescriptionsandcre- dimension d 1, f ψ(u;D) denotes the process used to obtain
+atingwebsitesfromhand-drawndrafts.Palm-E[41]aimsto this representation, similarly for i, and ψ denotes model
+integratereal-worldcontinuoussensorinputsintolanguage parameters. The user and item representations are then
+models, creating a connection between words and sensory fed into an interaction module to generate predictions. By
+information. This integration enables the development of minimizing the prediction errors against the actual interac-
+embodied language models capable of addressing robotic tionlabels,thelatentrepresentationswouldlearntoencode
+challenges. These works aim to leverage the robust gen- collaborativeinformationwithintheinteractiondata.
+eration and comprehension capabilities of LLM to process
+textual data and map information from other modalities
+4 METHODOLOGY
+such as vision and audio to the textual modality, thereby
+achieving a large multimodal model with language as its Collaborative information can be viewed as a distinct in-
+primarycarrier,whichissimilartoourmotivations. formation modality, capturing user and item co-occurrence
+relationships in the interaction data. The LLM itself lacks a
+dedicated mechanism to extract this modality beyond text
+3 PRELIMINARIES modality. To overcome the limitations, rather than modify-
+ing the LLMs directly, we continue to extract collaborative
+Tobeginwith,webrieflypresenttheproblemdefinition,the
+informationusingconventionalmodelsandthentransform
+basic concepts of LLMs, and the collaborative models used
+theextractedresultsintoaformatthattheLLMcancompre-
+inourframework.
+hend and utilize for recommendations, inspired by recent
+Problem Definition. Let D denote the historical inter-
+advancements in multimodal LLMs [5, 39]. This concept
+action dataset. Each data point within D is represented
+formsthefoundationofourCoLLMmethods.Inthefollow-
+as (u,i,y), where u and i correspond to a user and an
+ing, we provide a detailed overview of CoLLM, beginning
+item,respectively,withy ∈{1,0}indicatingtheinteraction
+with a description of the model architecture designed to
+label. Furthermore, there is additional textual information
+connecttheconventionalmodelsandLLM.Wethenoutline
+available for items, primarily in the form of item titles. In
+thetrainingstrategythatenablestheeffectiveintegrationof
+thisstudy,weexploretheutilizationofboththeinteraction
+collaborativeinformationintoLLMs.
+data and textual information to fine-tune an LLM for rec-
+ommendation purposes. Our goal is to enable the LLM to
+effectively leverage collaborative information beyond text 4.1 ModelArchitecture
+information,achievingsuperiorperformanceinbothwarm Figure2illustratesthemodelarchitectureofCoLLM,which
+andcoldrecommendationscenarios. consists of three components: prompt construction, hy-
+Large Language Model. LLMs refer to a class of lan- brid encoding, and LLM prediction. Similar to existing
+guage models equipped with at least several billion pa- approaches, CoLLM starts by converting recommendation
+rameters and trained on massive text datasets, showcasing data into language prompts (prompt construction), which
+remarkable emergent capabilities [4]. LLMs demonstrate are then encoded and inputted into an LLM to generate
+strong proficiency in general natural language understand- recommendations (hybrid encoding and LLM prediction).
+ing and generation, as well as various other aspects such Differently, our approach introduces an innovative aspect
+as world knowledge modeling, enabling them to excel at by incorporating collaborative information to enhance the
+handling a wide range of complex tasks as long as they LLMs’recommendations.Thisisachievedthroughthespe-
+canbedescribedinlanguage.Typically,LLMsprocessinput cificdesignsinthetwoformercomponents:
+text through the following two key steps: 1) tokenization • When constructing prompts, we add user/item ID fields
+andembeddinglookup:inthisstep,theinputtextistrans- in addition to text descriptions to represent collaborative
+formed into meaningful lexical tokens, which are then em- information.
+beddedintoavectorspace;2)contextualmodelingandout- • When encoding prompts, alongside the LLMs’ tokeniza-
+put generation (LLM Prediction): LLMs utilize their neural tion and embedding look-up for encoding textual infor-
+networks, primarily based on a decoder-only transformer mation,weemployaconventionalcollaborativemodelto
+architecture, to process the token embeddings obtained in generateuser/itemrepresentationsthatcapturecollabora-
+the previous step, generating coherent and contextually tiveinformation,andmapthemintothetokenembedding
+relevant output. In this work, we use Vicuna-7B [42] for spaceoftheLLM.
+recommendation.
+Afterrepresentingtextualandcollaborativeinformation
+Conventional Collaborative Recommender.Wemainly
+withinthetokenembeddingspace,theLLMcouldleverage
+consider the latent factor models, such as MF and Light-
+both types of information to perform recommendations.
+GCN, for encoding collaborative information. These ap-
+Next,wedelveintothespecificdetailsofeachcomponent.
+proaches typically represent users/items using latent fac-
+tors, also known as embeddings. Subsequently, they form
+4.1.1 PromptConstruction
+latent user/item representations through various opera-
+We utilize fixed prompt templates for prompt generation.
+tions,e.g.,neighborhoodaggregationinLightGCN,tobetter
+SimilartoTALLRec[12],wedescribeitemsusingtheirtitles
+modelcollaborativeinformation.Formally,foreachsample
+and describe users by the item titles from their historical
+(u,i,y)∈D,
+interactions. Uniquely, in order to incorporate collabora-
+u=f ψ(u;D); i=f ψ(i;D), (1) tive information, we introduce additional user and item
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 4
+“Yes”
+Large Language Model
+LoRA LLM
+(Vicuna-7B)
+Prediction
+Frozen
+Text Token Emb. User Emb. Text Token Emb. Item Emb. Text Token Emb. Not Frozen
+Frozen(Optional)
+Hybrid
+Mapping
+LLM tokenization CIE Encoding
+& Emb. Look-up Collab. Model Rec. Data
+Text <UserID> & <TargetItemID>
+#Question: A user has … following movies: <HisItemTitleList>...the …<UserID>. Using …. enjoy Prompt
+the movie titled <TargetItemTitle>…. <TargetItemID>? Answer with "Yes" or "No". \n#Answer: Construction
+Fig.2:ModelarchitectureoverviewofCoLLM,comprisingthreekeycomponents:promptconstruction,hybridencoding,
+andLLMprediction.“Collab.”isshortfor“collaborative”,“Rec.”for“recommendation”,and“Emb.”for“embedding”.
+ID-related fields that do not carry meaningful semantics where t k represents a text token, and u/i signi-
+but serve as placeholders for the collaborative information fies the user/item (ID) placed within the “⟨UserID⟩”/
+withintheprompt.Ultimately,ourfixedprompttemplateis “⟨TargetItemID⟩” field. We then further encode the prompt
+structuredasfollows: intoasequenceofembeddingsE:
+• higP hro rm atip nt gste tm op thla ete fo. ll# oQ wu ines gti io tn em: sA
+:
+⟨Hus ise Ir temha Ts itleg Li iv se t⟩n
+.
+E =[e t1,...,e tk,e u,e tk+1,...,e i,...,e tK], (2)
+Additionally, we have information about the user’s where e tk ∈ R1×d2 denotes the token embedding for t k
+preferences encoded in the feature ⟨UserID⟩. Using all in the LLM with dimension d 2, obtained via embedding
+availableinformation,makeapredictionaboutwhether lookup, i.e., e tk = Embedding LLM(t k); while e u/e i ∈
+the user would enjoy the item titled ⟨TargetItemTitle⟩ R1×d2 denotes the collaborative information embeddings
+with the feature ⟨TargetItemID⟩? Answer with “Yes” or (i.e., collaborative embeddings) for the user u/item i, ob-
+“No”.#Answer: tainedviathefollowingCIEmodule.
+In this template, “⟨HisItemTitleList⟩” represents a list CIEmodule:TheCIEmoduleconsistsofaconventional
+of item titles that a user has interacted with, ordered by collaborative model (f ψ(·) in Equation (1)) and a mapping
+theirinteractiontimestamps,servingastextualdescriptions layer g ϕ(·) parameterized by ϕ, to extract collaborative
+of the user’s preferences. “⟨TargetItemTitle⟩” refers to the informationforLLMusage.Whenprovidedwiththeuseru
+title of the target item to be predicted. The “⟨UserID⟩” and item i, the conventional collaborative model generates
+and “⟨TargetItemID⟩” fields are utilized to incorporate user useranditemIDrepresentations(uandi)encodingcollab-
+and item IDs, respectively, for injecting collaborative infor- orativeinformation.Subsequently,themappinglayermaps
+mation. To maintain semantic coherence while integrating these representations to the LLM token embedding space,
+user/item IDs, we treat them as a type of feature for user- creating the final latent collaborative embeddings (e u and
+s/items within the prompt, as indicated by the underlined e i)usedbytheLLM.Formally,wehave:
+content in the template. For each recommendation sample, e =g (u), u=f (u;D),
+u ϕ ψ
+we populate the four fields with the corresponding values (3)
+e =g (i), i=f (i;D),
+ofthesampletoconstructthesample-specificprompt. i ϕ ψ
+where u = f ψ(u;D) ∈ R1×d1 denotes the user representa-
+4.1.2 HybridEncoding tion obtained by f ψ following Equation (1) for D, similarly
+The hybrid encoding component is utilized to convert the for i. The collaborative model can be implemented as any
+input prompt into latent vectors, i.e., embeddings suitable conventional collaborative recommender as described in
+for LLM processing. In general, we employ a hybrid en- Section 3. As for the mapping layer, we implement it as
+coding approach. As shown in Figure 2, for all textual a Multilayer Perceptron (MLP), maintaining an input size
+content,wemakeuseoftheLLM’sbuilt-intokenizationand equal to the dimension d 1 of u/i and an output size equal
+embeddingmechanismtoconvertitintotokensandsubse- totheLLMembeddingsized 2 (usuallyd 1 <d 2).
+quent token embeddings. In contrast, when dealing with
+the “⟨UserID⟩” and “⟨TargetItemID⟩” fields, we leverage 4.1.3 LLMPrediction
+a Collaborative Information Encoding (CIE) module built Once the inputted prompt has been converted into a se-
+with a conventional collaborative recommender, aiming at quence of embeddings E (in Equation (2)), the LLM can
+extractingcollaborativeinformationfortheLLMtoutilize. utilize it to generate predictions. However, due to the ab-
+Formally, for a prompt corresponding to the sample sence of specific recommendation training in LLM, instead
+(u,i,y) ∈ D, we initiate the process by using the LLM To- of relying solely on the LLM, we introduce an additional
+kenizer to tokenize its textual content. The tokenization re- LoRAmodule[43]toperformrecommendationpredictions,
+sult is denoted as P = [t 1,t 2,...,t k,u,t t+1,...,i,...,t K], as depicted in Figure 2. The LoRA module entails adding
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 5
+pairsofrank-decompositionweightmatricestotheoriginal atepredictionsandtunetheCIEmodeltominimizepredic-
+weights of the LLM in a plug-in manner for specifically tion errors. Formally, we solve the following optimization
+learning new tasks (recommendation) while just introduc- problem:
+(cid:88)
+ing a few parameters. Then, the prediction can be formu- min Ω ℓ(h Θˆ+Θˆ′(E),y), (5)
+latedasfollows: (u,i,y)∈D
+yˆ=h (E),
+Θˆ+Θ′ where E represents the sequence of embeddings for the
+where Θˆ denotes the fixed model parameters of the pre- full prompt, obtained through both the CIE module and
+trained LLM h(·), and Θ′ denotes the learnable LoRA pa- the LLM’s embedding lookup as shown in Equation (2). Ω
+rametersfortherecommendationtask.yˆrepresentsthepre- denotes the model parameters of the CIE module that we
+diction probability for the label being 1, i.e., the likelihood aimtotrain,forwhich,weconsidertwodifferentchoices:
+of answering “Yes” for LLM. The consideration of using • Ω = ϕ,implyingthatweonlytunethemappinglayerg ϕ
+LoRAhereisthatwiththeplug-inapproach,weonlyneed whileutilizingawell-trainedcollaborativemodelf ψ=ψˆin
+to update the LoRA weights to learn the recommendation theCIE,whereψˆ representspre-trainedparametersforf
+ψ
+task,enablingparameter-efficientlearning. (withBCE).
+• Ω = {ϕ,ψ}, meaning we train both the conventional
+4.2 TuningMethod collaborative model f ψ and the mapping layer g ϕ within
+theCIEmodule.
+We now consider how to train the model parameters. To
+We believe both choices are viable. The first option may be
+expedite the tuning process, we freeze the LLM, including
+faster since it focuses solely on tuning the mapping func-
+itsembeddinglayer,andfocusontuningtheplug-inLoRA
+tion. However, the second option has the potential to lead
+and CIE module. Functionality speaking, the CIE module
+to better performance as it can more seamlessly integrate
+is responsible for extracting collaborative information and
+collaborative information into LLM with fewer constraints
+making it usable for LLM in recommendation, while the
+fromthecollaborativemodel.
+LoRA module assists the LLM in learning the recommen-
+The above two steps are executed only once. It’s worth
+dation task. To tune them, one intuitive approach is to
+noting that in step 2, we exclusively tune the CIE mod-
+directlytrainthemsimultaneously.However,becauseofthe
+ule without fine-tuning the LoRA to utilize collaborative
+significant reliance on collaborative information, training
+information. The rationale behind this is as follows: after
+them both from scratch concurrently may negatively im-
+step 1, the LLM has already acquired the capability to
+pact LLM recommendations in cold scenarios. To address
+perform recommendation tasks, i.e., inferring the matching
+this, we propose a two-step tuning approach, tuning each
+betweenusersanditemswithinthetokenembeddingspace.
+componentseparatelyasfollows:
+Collaborative information would be also leveraged based
+• Step 1. Tuning the LoRA Module. To endow the cold- oninferringthematching.Onceitismappedintothetoken
+start recommendation capabilities of LLM, our initial focus embedding space, we believe it can be effectively used by
+isonfine-tuningtheLoRAmoduletolearnrecommendation the LLM for recommendations without further tuning the
+tasks independently of collaborative information. During LoRAmodule.
+this step, we exclude the collaborative information-related
+portions of the prompt, which are denoted by the content
+with underlines in the prompt template. Instead, we solely 4.3 Discussion
+utilize the remaining text-only segment of the prompt to
+Relation to Soft Prompt Tuning. When considering our
+generate predictions and minimize prediction errors for
+method without the LoRA module, it can be seen as a
+tuningtheLoRAmoduletolearningrecommendation.For-
+variant of soft prompt tuning in recommendation systems,
+mally,thiscanbeexpressedas:
+withcollaborativeembeddingsservingasthesoftprompts.
+Θˆ′ =argmin Θ′ (cid:88) ℓ(h Θˆ+Θ′(E t),y), (4) H 1)o tw heev se or f, tt pw ro omd pis tti un tc it lizd eif dfe bre yn tc he es Lse Lt Mou rr eta ap inp sro aa lc oh wa -p raa nrt k:
+(u,i,y)∈D
+characteristic,asitisderivedfromlow-rankrepresentations
+where E t represents the sequence of embeddings for the of conventional collaborative models; and 2) the collabo-
+text-only prompt, fully obtained through the tokenization rative model can provide valuable constraints and priors
+and embedding lookup in the LLM; ℓ denotes the rec- for learning the soft prompt, offering additional guidance
+ommendation loss, which is implemented as the binary regarding the collaborative information. These two factors
+cross-entropy (BCE) loss; h Θˆ+Θ′(E t) represents the LLM’s enhance the efficacy of our method in capturing collabo-
+predictionusingE t.andΘˆ′ denotesthelearnedparameters rative information and encoding personalized information
+fortheLoRAmodule. moreeffectively.
+• Step 2. Tuning the CIE Module. In this step, we tune Inference Efficiency. We acknowledge that a significant
+theCIEmodulewhilekeepingallothercomponentsfrozen. challenge for LLMRec, including our CoLLM, is its rel-
+TheobjectiveofthistuningstepistoenabletheCIEmodule atively high computational cost, posing impediments to
+to learn how to extract and map collaborative information practical applications. However, a range of acceleration
+effectively for LLM usage in recommendations. To achieve techniques tailored for LLMs has emerged, showcasing
+this, we utilize prompts containing collaborative informa- promising outcomes, such as caching and reusing [44].
+tion,whichareconstructedusingthefulltemplate,togener- LLMRec, including our CoLLM, could potentially benefit
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 6
+TABLE1:Statisticsoftheevaluationdatasets.
+from these techniques to enhance their inference efficiency.
+Giventhatourobjectiveistoincorporatecollaborativeinfor- Dataset #Train #Valid #Test #User #Item
+mationfortheimprovementofrecommendationquality,the ML-1M 33,891 10,401 7,331 839 3,256
+explorationofaccelerationmethodsisdeferredtofuturere- Amazon-Book 727,468 25,747 25,747 22,967 34,154
+search.Additionally,itisnoteworthythat,incomparisonto
+existing LLMRec methods (such as TALLRec), our CoLLM
+5.1.1 EvaluationMetrics
+justintroducestheCIEmodule.Themoduleismuchsmaller
+Weemploytwocommonlyusedmetricsforexplicitrecom-
+whencomparedtoLLMs,anditstrainingdoesnotinvolve
+mendation to assess the performance of studied methods:
+theupdatingoftheLLM.Consequently,CoLLMwouldnot
+AUC,UAUC[49]andNDCG[50].AUCistheareaunderthe
+introduce excessive additional overhead in both training
+ROC curve that quantifyes the overall prediction accuracy.
+andinference,asdemonstratedinSection5.3.3.
+UAUCisderivedbyfirstcomputingtheAUCindividually
+for each user over the exposed items and then averaging
+theseresultsacrossallusers.NDCGdenotestheNormalized
+5 EXPERIMENTS
+Discounted Cumulative Gain metrics. AUC evaluates the
+In this section, we perform experiments to answer two overallrankingquality.UAUCandNDCGprovideinsights
+research questions: RQ1: Can our proposed CoLLM ef- intouser-levelrankingquality.
+fectively augment LLMs with collaborative information to
+5.1.2 ComparedMethods
+improve recommendation, in comparison to existing meth-
+ods? RQ2: What impact do our design choices have on the TofullyevaluatetheproposedmethodCoLLM,wecompare
+performance/efficiencyoftheproposedmethod?Howdoes it with three types of methods: conventional collabora-
+themethodperformonotherdatasetsandLLMbackbones? tivemethods,combininglanguagemodelandcollaborative
+model methods, and LLMRec methods. Specifically, we
+selectthefollowingmethodsasbaselines:
+5.1 ExperimentalSettings • MF[14]:ThisreferstoMatrixFactorization,onerepresen-
+tativelatentfactor-basedcollaborativefilteringmethod.
+Weconductourexperimentsontwodatasets:
+• LightGCN [28]: This is a representative graph-based col-
+• ML-1M[45]referstothewell-knownmovierecommenda- laborative filtering method, which utilizes a simplified
+tiondataset—MovieLens-1M1.Thisdatasetcontainsuser
+graph convolutional neural network to enhance user in-
+ratingsonmovies,collectedbetween2000and2003,with
+terestmodeling.
+ratings on a scale of 1 to 5. We convert these ratings into
+• SASRec [51]: This is a representative sequential recom-
+binary labels using a threshold [46] of 3. Ratings greater
+mendationmethod,whichusestheself-attentionnetwork
+than3arelabeledas“positive”(y =1),whiletherestare
+toencodesequentialpatternsformodelinguserinterest.It
+labeledas“negative”(y =0).
+couldbethoughtofasacollaborativemethodconsidering
+• Amazon-Book [15] refers to a book recommendation sequentialinformation.
+dataset,the“book”subsetofthefamousAmazonProduct
+• DIN [52]: This is a representative collaborative CTR
+Review dataset2. It compiles user reviews of books from
+model,whichemploysanattentionmechanismtoactivate
+Amazon, collected between 1996 and 2018, with review
+the most relevant user behavior for adaptively learning
+scores ranging from 1 to 5. We transform these review
+userinterestwithrespecttoacertainitem.
+scoresintobinarylabelsusingathreshold3 of4.
+• CTRL(DIN)[23]:Thisisastate-of-the-art(SOTA)method
+Tobettersimulatereal-worldrecommendationscenarios forcombininglanguageandcollaborativemodelsthrough
+and prevent data leakage [47, 48], we split the dataset into knowledgedistillation.WeutilizeaDIN[52]asthecollab-
+training, validation, and testing sets based on the interac- orativemodel.
+tion timestamp. Specifically, for ML-1M, we preserve the • ICL [17]: This is a LLMRec method based on the In-
+interactions from the most recent twenty months, using Context Learning ability of LLM. It directly queries the
+the first 10 months for training, the middle 5 months for originalLLMforrecommendationsusingprompts.
+validation, and the last 5 months for testing. As for the • Prompt4NR (Vicuna) [53]: This is a SOTA method that
+Amazon-Bookdataset,givenitslargescale,wejustpreserve uses both fixed and soft prompts to utilize traditional
+interactions from the year 2017 (including about 4 million Language Models (LM), such as BERT [54], for recom-
+interactions),allocatingthefirst11monthsfortraining,and mendation purposes. We extend this method to the LLM
+the remaining two half months for validation and testing, Vicuna-7B for a fair comparison and tune the LLM with
+respectively. Given the sparse nature of the Amazon-Book LoRAtomanagecomputationalcosts.
+dataset, we filtered out users and items with fewer than 20 • TALLRec [12]: This is a state-of-the-art LLMRec method
+interactionstoensuredataqualityformeasuringwarm-start that aligns LLM with recommendations through instruc-
+performance. The statistical information of the processed tiontuning.WeimplementitonVicuna-7B.
+datasetisavailableinTable1. ApartfromCTRL,thereareotherlanguagemodel-based
+recommender models such as P5 [55] and CTR-BERT [37].
+1.https://grouplens.org/datasets/movielens/1m/ However, these models have demonstrated weaker perfor-
+2.https://cseweb.ucsd.edu/∼jmcauley/datasets.html#amazon
+mance when compared to CTRL [23]. Therefore, we have
+reviews
+chosen not to include them in our comparative analysis.
+3.Ahighervalueisutilizedtopreventsignificantimbalancebetween
+positiveandnegativedata. Regarding BIGRec [20], it is not suitable for comparison in
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 7
+TABLE 2: Overall performance comparison. “Collab.” denotes collaborative methods. “Rel. Imp.” denotes the relative
+improvement of CoLLM compared to baselines, averaged over the AUC and UAUC metrics. For a collaborative method
+”X”,theRel.Imp.iscomputedusingCoLLM-X;ForLLMRecmethods,itisdeterminedbycomparingthemtoCoLLM-MF.
+Dataset ML-1M Amazon-Book
+Methods AUC UAUC NDCG Rel.Imp. AUC UAUC NDCG Rel.Imp.
+MF 0.6482 0.6361 0.8447 10.3% 0.7134 0.5565 0.8194 12.8%
+LightGCN 0.5959 0.6499 0.8564 13.2% 0.7103 0.5639 0.8245 11.0%
+Collab.
+SASRec 0.7078 0.6884 0.8612 1.9% 0.6887 0.5714 0.8244 8.4%
+DIN 0.7166 0.6459 0.8496 4.9% 0.8163 0.6145 0.8419 3.2%
+LM+Collab. CTRL(DIN) 0.7159 0.6492 0.8559 4.6% 0.8202 0.5996 0.8363 4.2%
+ICL 0.5320 0.5268 0.8114 33.8% 0.4820 0.4856 0.7917 48.2%
+LLMRec Prompt4NR(Vicuna) 0.7071 0.6739 0.8663 2.7% 0.7224 0.5881 0.8346 10.4%
+TALLRec 0.7097 0.6818 0.8711 1.8% 0.7375 0.5983 0.8361 8.2%
+CoLLM-MF 0.7295 0.6875 0.8714 - 0.8109 0.6225 0.8457 -
+CoLLM-LightGCN 0.7100 0.6967 0.8740 - 0.8026 0.6149 0.8411 -
+Ours
+CoLLM-SASRec 0.7235 0.6990 0.8765 - 0.7746 0.5962 0.8361 -
+CoLLM-DIN 0.7353 0.6923 0.8735 - 0.8245 0.6474 0.8550 -
+oursetting,asitdoesnotoptimizepredictionaccuracyand 5.2 PerformanceComparison(RQ1)
+would yield poor performance in our setting4 Regarding
+In this section, we study the recommendation performance
+our own methods, we have implemented them across all
+ofCoLLMoverallusersaswellasindifferentsubgroups.
+four types of collaborative models, denoted as CoLLM-
+MF,CoLLM-LightGCN,CoLLM-SASRec,andCoLLM-DIN,
+5.2.1 OverallPerformance
+respectively. Specifically, for collaborative models (SASRec
+and DIN) that incorporate historical sequences, we incor- The overall performance comparison between CoLLM and
+porate their sequence representation as a part of the user baselinesissummarizedinTable2(wheretheCoLLM-DIN
+representationwithinourCIEmodule(uinEquation(3)). results on ML-1M are obtained by tuning the whole CIE).
+Fromthetable,wehavethefollowingobservations:
+5.1.3 ImplementationDetails • When compared to baselines, the best version of CoLLM
+outperforms them in both metrics on the two datasets.
+We implement all the compared methods using PyTorch
+Theresultsconfirmtheexcellenceofourapproach.
+2.0. When not specified by the original paper, we employ
+Binary Cross-Entropy (BCE) as the optimization loss for all • IncomparisonbetweenthebestLLMRecbaseline(TALL-
+Rec) and collaborative models, it outperforms MF, Light-
+methods. For (large) language models, we use the AdamW
+GCN, and SASRec but falls short of beating DIN. How-
+optimizer, and for other methods, we use the Adam opti-
+ever, after introducing collaborative information into
+mizer [56]. Regarding hyperparameter tuning, we explore
+LLMRecusingCoLLM,LLMconsistentlyachievesperfor-
+thelearningratewithintherangeof[1e-2,1e-3,1e-4]forall
+manceimprovements(exceptforUAUC/NDCGforSAS-
+methods,andthe(recommendation)embeddingsizewithin
+Rec on Amazon-Book) and surpasses the corresponding
+the range of [64, 128, 256]. Regarding weight decay, we set
+collaborative baselines. This demonstrates the necessity
+itto1e-3forallLLM-basedmethods,whilewetuneitinthe
+range of [1e-2, 1e-3, ..., 1e-7] for all other smaller models. ofincorporatingcollaborativeinformation.
+ForSASRec,weestablishthemaximumlengthofhistorical • When focusing on LLMRec methods, the ICL method
+consistentlyproducestheweakestresults,inlinewithpre-
+interaction sequences in accordance with the average user
+viousfindings[12].ThisunderscoresLLM’sinherentlimi-
+interaction count in the training data, as specified in the
+tationinrecommendationandemphasizestheimportance
+originalpaper.WeadoptTALLRec’s[12]practiceofsetting
+of tuning LLM for recommendation tasks. Interestingly,
+the maximum sequence length to 10 for all other methods.
+whenwescrutinizePrompt4NR(Vicuna),itnotonlyfine-
+For DIN and CTRL (DIN), we conduct additional tuning
+tunes LLM itself but also incorporates some adaptable
+for the dropout ratio within the range of [0.2, 0.5, 0.8]. We
+prompts, bearing resemblances to CoLLM. Nevertheless,
+also adjust their hidden layer size, which varies between
+[200×80×1]and[256×128×64×1],correspondingtothetwo it not only falls short of matching CoLLM’s performance
+but even lags behind TALLRec, which exclusively fine-
+settingsdescribedintheCTRLandDINpapers.Regarding
+tunes LLM. This suggests that the improvements in
+otherspecificparametersofthebaselinemodels,weadhere
+CoLLMstemfromitscollaborativeinformationmodeling
+to the configurations outlined in their original papers. For
+mechanismratherthanonlyrelyingonadaptivelyupdat-
+CoLLM,wesetthehiddenlayersizeoftheMLPintheCIE
+ableprompts.
+moduleastentimeslargerthantheinputsize.FortheLoRA
+module, we follow the same configuration as in the TALL- • Regarding the CTRL approach, which integrates LM and
+Rec paper, setting r, alpha, dropout, and target modules, collaborativemodels,itexhibitsthecapabilitytoenhance
+one metric while adversely affecting another across both
+to8,16,0.05,and“[q proj,v proj]”,respectively.
+datasets. This implies its capability to effectively harness
+both the LM’s strengths and collaborative information
+4.For instance, BIGRec’s highest AUC on ML-1M is only 0.56,
+whereasTALLRecsurpasses0.70. for enhanced recommendations is limited. The operation
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 8
+TABLE3:EnsembleresultsontheAUCmetric.
+Single Ensemble
+Methods MF TALLRec CoLLM-MF MF+TALLRec MF+CoLLM-MF
+ML-1M 0.6482 0.7097 0.7295 0.7239 0.7364
+Amazon-book 0.7134 0.7375 0.8109 0.7782 0.8112
+0.76
+0.75
+0.74
+0.73
+0.72
+0.71
+AUC UAUC
+CUA
+0.73
+0.72
+0.71
+0.70
+0.69
+0.68
+0.67
+0.66
+CUAU
+ML-1M Warm
+MF 0.70
+TALLRec
+CoLLM
+0.65
+0.60
+0.55
+0.50
+AUC UAUC
+CUA
+0.64
+0.62
+0.60
+0.58
+0.56
+0.54
+CUAU
+ML-1M Cold
+MF
+TALLRec
+CoLLM
+0.84
+0.82
+0.80
+0.78
+0.76
+0.74
+0.72
+0.70
+AUC UAUC
+CUA
+0.66
+0.64
+0.62
+0.60
+0.58
+0.56
+CUAU
+Amazon-Book Warm
+0.80
+MF
+TALLRec 0.75
+CoLLM
+0.70
+0.65
+0.60
+0.55
+0.50
+AUC UAUC
+CUA
+0.75
+0.70
+0.65
+0.60
+0.55
+0.50
+CUAU
+Amazon-Book Cold
+MF
+TALLRec
+CoLLM
+Fig.3:Performancecomparisoninwarm(left)andcold(right)scenariosonML-1MandAmazon-Book.
+of CTRL involves initially distilling LM information into ble indicates that combining MF and TALLRec via ensem-
+DINandsubsequentlyfine-tuningDINtoincorporatecol- ble averaging consistently yields inferior results compared
+laborative information. This operation faces an inherent to CoLLM-MF. However, applying ensemble averaging to
+challenge in terms of the forgetting problem, resulting CoLLM-MF still leads to some marginal improvements.
+in the loss of language model information. Additionally, These findings underscore the superiority of CoLLM’s
+it continues to depend on DIN for recommendations, mechanism for integrating collaborative information with
+lackingtheutilizationoftheLMmodel’sinherentcapabil- LLMs,surpassingmereensembletechniquesandfacilitating
+ities, such as reasoning. Our CoLLM aligns collaborative thefullutilizationofLLMs’capabilities.
+informationwithLLMswhilestillrelyingontheLLMfor
+predictions, effectively mitigating these limitations and 5.2.2 PerformanceinWarmandColdScenarios
+consistentlyimprovingperformance. Previous research has demonstrated that LLMRec excels in
+• When implementing CoLLM’s CIE module with various cold-start scenarios [12], while collaborative information is
+collaborativemodels,itconsistentlyyieldsimprovements advantageousformodelinguserinterestswhenrichdatais
+compared to both the respective collaborative method available[22,58].CoLLMseekstoincorporatecollaborative
+baselines and LLMRec baselines in almost all cases. This informationintoLLMRec,aimingtomakeitperformwellin
+showcases CoLLM’s flexibility in incorporating differ- bothwarmandcoldscenarios.Toassessthesuccessofthis
+entcollaborativemodelingmechanisms.Furthermore,it’s goal, we conduct a detailed examination of the methods’
+worthhighlightingthatCoLLM’sperformanceisroughly performance in warm and cold scenarios. In particular, we
+positively correlated with the performance of the corre- dividethetestingsetintowarmandcoldsubsets:thewarm
+sponding collaborative model. This suggests that intro- subsetcomprisesinteractionsbetweenusersanditemsthat
+ducing better collaborative modeling mechanisms could have appeared at least three times in the training dataset,
+contributetoenhancingtheperformanceofCoLLM. while the cold subset includes the remaining interactions.
+Notably, our cold-start scenario is not strictly cold, as it
+Ensemble. We have not included the ensemble method allows users/items to have a few interactions. Without
+as our baseline above, as it could also be applied to our losinggenerality,weprimarilycompareMF,TALLRec,and
+approach. Here, we conduct a detailed study. To do so, we CoLLM in terms of their performance using these two
+employ ensemble averaging [57] to combine the MF and subsets.OurfindingsarepresentedinFigure3,fromwhich
+TALLRec models, and then compare the results with our wemakethreeobservations:
+CoLLM-MFapproach.Furthermore,weinvestigatewhether • In the warm scenario, across two datasets, TALLRec ex-
+ensembling CoLLM-MF with MF can achieve further im- hibits a lower AUC score compared to MF, and MF in
+provementsthroughensembleaveraging.Theperformance turn is outperformed by CoLLM. In terms of UAUC,
+of these methodologies is summarized in Table 3. The ta- MF falls short of TALLRec, which lags behind CoLLM.
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 9
+TABLE 4: Results of the ablation studies over CoLLM with TABLE 5: Overall performance of CoLLM with different
+respecttotheCIEmodule. tuningstrategies.
+Dataset ML-1M Amazon-Book Dataset ML-1M Amazon-Book
+Methods AUC UAUC AUC UAUC TuningMethods AUC UAUC AUC UAUC
+CoLLM-MF 0.7295 0.6875 0.8133 0.6314 Default 0.7295 0.6875 0.8109 0.6225
+w/oCIE 0.7097 0.6818 0.7375 0.5983 T1 0.7360 0.6946 0.8154 0.6139
+T2 0.7418 0.6906 0.8288 0.6352
+w/UI-token 0.7214 0.6563 0.7273 0.5956
+T3 0.7131 0.6661 0.8104 0.5753
+Theseresultssuggestthat,attheveryleast,intheoverall
+evaluation (AUC) context, existing LLMRec (TALLRec) efficiency, leading to a reduction in predictive capabilities,
+hasshortcomingsinwarmscenarios.However,theintro- as discussed in [26]. In contrast, our method employs
+ductionofcollaborativeinformationcanleadtoimprove- a traditional collaborative model for encoding, effectively
+mentsinwarmscenarios. maintainingthemodeledcollaborativeinformationinalow-
+• In the cold scenario, both TALLRec and CoLLM clearly rankstatetoreduceredundancy.
+outperform MF. This highlights the advantages of LLM-
+Rec methods in cold scenarios, while collaborative meth-
+5.3.2 TheInfluenceofTuningChoices
+ods lack the proficiency to handle cold scenarios. Mean-
+while, CoLLM broadly maintains comparability with We now delve into the impact of training choices on
+TALLRec, performing better in AUC and slightly worse CoLLM’s performance. Our default approach involves a
+in UAUC. These imply that CoLLM can still effectively two-step tuning strategy. Initially, we exclusively take tex-
+leveragethestrengthsofLLMRecincoldscenarios. tualinformationtotraintheLoRAmoduleforrecommenda-
+tiontasklearning.Subsequently,wetunethemappinglayer
+Overall, CoLLM has demonstrated remarkable improve-
+of the CIE module while keeping the collaborative model
+ments over TALLRec in warm scenarios while maintain-
+fixed as pre-trained (i.e., tuning Ω = ϕ while retaining
+ing its proficiency in cold scenarios. This underscores
+CoLLM’ssuccessfulintegrationofcollaborativeinformation ψ = ψˆ after step 1). In this subsection, we further explore
+to achieve the goal of enabling LLMRec to perform effec- thefollowingtuningstrategies:
+tivelyinbothcoldandwarmscenarios. • T1, aligning with our default two-step tuning but tunes
+the entire CIE model (Ω = {ϕ,ψ}) with the collaborative
+5.3 In-depthAnalysis(RQ2) model (ψ) initialized to the pre-trained one (ψˆ ) in the
+secondstep.
+In this subsection, we conduct experiments to study the
+influenceofdifferentdesignchoicesontheCoLLM. • T2, following the default two-step tuning approach but
+tunes the entire CIE model (Ω = {ϕ,ψ}) from scratch in
+5.3.1 TheEffectofCIEModule thesecondstep.
+• T3,employingaone-steptuningapproach,directlytuning
+Webeginbyinvestigatingtheimpactofmodelarchitecture
+the LoRA module and the CIE’s mapping layer simulta-
+designs.Thecentralelementofourdesignsistheintroduc-
+neouslywhilefixingthepre-trainedcollaborativemodel.
+tion of the CIE module to extract collaborative information
+forLLMs.ToassessitsinfluenceonCoLLM’sperformance, Wecomparethesemethodsintermsoftheiroverallperfor-
+we compare CoLLM-MF with two variants: 1) the variant mance, as shown in Table 5, as well as their performance
+that directly omits the CIE module (referred to as “w/o inwarmandcoldscenarios,asindicatedinFigure4.Please
+CIE”); and 2) the variant that excludes the CIE module but note that in the figure, we have omitted the results on the
+instead directly introduces tokens and token embeddings Amazon-book, as they exhibit similar phenomena to those
+to represent users and items in the LLM (referred to as ontheML-1M,tosavespace.
+“w/ UI-token”). The first variant is equal to TALLRec. The Based on the figure and table, we observe that within
+second variant follows the straightforward approach for our two-step update framework, the additional tuning of
+modeling collaborative information described in Section 1. the collaborative model in CIE (i.e., T1 and T2) can yield
+ThecomparisonresultsaresummarizedinTable4. additional performance improvements in most cases, as
+According to the figure, the “w/o CIE” variant falls expected.Theadditionaltuningallowsthecapturedcollab-
+short of the original CoLLM. This result underscores the orative information to be seamlessly integrated by LLMs.
+core role of the CIE module in CoLLM to enhance the However, it does introduce extra computational overhead
+performance. The “w/ UI-token” variant also yields infe- and slower convergence rates, e.g., requiring at least five
+rior performance compared to CoLLM and even performs times the training effort in ML-1M. As a result, we opt for
+worse than the variant lacking collaborative information more efficient approaches. Furthermore, when comparing
+modeling (i.e., “w/o CIE”). This observation confirms that the single-step tuning method, T3, with the other two-step
+directly introducing tokens for users and items in the LLM methods,wenoticethatitusuallyexhibitsrelativelyinferior
+cannot effectively capture collaborative information for it. results,particularlyincoldscenarios,whereitsperformance
+Therationalebehindthiscouldbethatincorporatingtokens declineisquitenoticeable.Thisunderscoresthesignificance
+(along with token embeddings) for encoding collaborative of the first step in our two-step training, which uses text-
+information increases tokenization redundancy within the only data to learn recommendation tasks, to ensure recom-
+LLMandsubsequentlydiminishesthemodel’scompression mendationperformanceincoldstartscenarios.
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 10
+0.77
+0.76
+0.75
+0.74
+AUC UAUC
+CUA
+0.73
+0.72
+0.71
+0.70
+0.69
+CUAU
+ML-1M Warm
+0.72
+Default
+T1 0.70 T2
+T3
+0.68
+0.66
+0.64
+AUC UAUC
+CUA
+0.72
+0.68
+0.64
+0.60
+0.56
+0.52
+CUAU
+ML-1M Cold
+Default
+T1 T2
+T3
+Fig.4:PerformanceofdifferenttuningstrategiesforCoLLMonML-1Minwarmandcoldscenarios.
+TABLE 6: Training and Total Inference Time Comparison: TABLE 7: Performance comparison on Qwen2-1.5B back-
+TALLRec vs. CoLLM-MF. ”∆” indicates the relative cost boneacrossML-1MandAmazon-Bookdatasets.
+improvementofCoLLM-MFoverTALLRec.”Book”isshort
+Dataset ML-1M Amazon-Book
+for”Amazon-book”.
+Metric AUC UAUC AUC UAUC
+MF 0.6482 0.6361 0.7134 0.5565
+TrainTime InferenceTime
+TALLRec 0.7027 0.6638 0.7256 0.5830
+Dataset ML-1M Book ML-1M Book
+CoLLM-MF 0.7354 0.6950 0.8068 0.6147
+TALLRec 32min 354min 72s 360s
+CoLLM-MF 36min 418min 82s 398s
+∆ 13% 18% 14% 11%
+TALLRec, using the Qwen2-1.5B [59] backbone to compare
+their performance. The results, summarized in Table 7,
+5.3.3 Efficiency show that CoLLM consistently outperforms both TALLRec
+and MF. This demonstrates the general applicability of our
+Efficiency challenges pose a significant impediment to the
+methodacrossdifferentLLMbackbones.
+application of the LLMRec. We next investigate how our
+design, which incorporates collaborative information, in- Other Dataset. To further validate the effectiveness of our
+fluences the training and inference efficiency of LLMRec. approach across different datasets, we have included two
+In terms of training, the primary additional cost in our additional datasets: Video Games and CDs & Vinyl from
+approach arises from the training of the CIE module in the Amazon dataset. We take CoLLM-MF as the study
+our two-step tuning. Fortunately, the pre-training of the example and compare it with the most related baselines
+collaborative module (i.e., f ψ=ψˆ) in the CIE alleviates the MFandTALLRec.Theresultsdemonstratethatourmethod
+need for extensive additional training in CoLLM when could still effectively enhance LLMRec by incorporating
+compared to the representative LLMRec method TALLRec. collaborative information. Specifically, on the Video Games
+Table6illustratesthat,underidenticalresourceconditions5, dataset,theAUCvaluesforMF,TALLRec,andCoLLM-MF
+thetrainingtimeofCoLLMincreasesbyonlyapproximately are0.6161,0.7356,and0.7440,respectively.Similarly,onthe
+15.5%, averaged across the two datasets, compared to the CDs&Vinyldataset,theAUCvaluesare0.6957,0.6607,and
+baselineTALLRec. 0.7237,respectively.Theconsistentsuperiorperformanceof
+Concerning inference, the cost associated with the CIE the proposed method across different datasets indicates its
+moduleisanticipatedtobenegligibleduetoitssignificantly generaleffectiveness.
+smallerscalecomparedtotheLLM.Theprimaryadditional
+costinourmethodarisesfromtheextratokensrequiredto
+describe collaborative information in our prompt template
+6 CONCLUSION
+(as indicated in the underlined part) in Section 4.1.1. These
+Inthisstudy,weunderscorethesignificanceofcollaborative
+additional tokens constitute only a small proportion of the
+information modeling in enhancing recommendation per-
+total prompts. Consequently, the supplementary inference
+formance for LLMRec, particularly in warm scenarios. We
+cost is expected to be relatively modest. As demonstrated
+introduce CoLLM, a novel approach tailored to incorporat-
+in Table 6, CoLLM incurs only a 12.5% increase in total
+ingcollaborativeinformationforLLMRec.Byexternalizing
+inferencecostonaverageacrossthetwodatasets.
+traditionalcollaborativemodelsforLLMs,CoLLMnotonly
+ensures effective collaborative information modeling but
+5.3.4 MethodGeneralization
+also provides flexibility in adjusting the modeling mecha-
+Thissectioninvestigateswhetherourmethodcaneffectively nism.Extensiveexperimentalresultsillustratetheeffective-
+applytootherdatasetsandLLMbackbones. nessandadaptabilityofCoLLM,successfullyenablingLLM
+toexcelinbothwarmandcoldrecommendationscenarios.
+Other LLM Backbone.Tofurthervalidatetheeffectiveness
+Currently,ourexperimentshavebeenexclusivelyconducted
+of our approach on different LLM backbones, we imple-
+on Vicuna-7B. In the future, we will explore other LLMs.
+mentCoLLM-MFandthetop-performingLLMRecbaseline,
+Moreover, considering the evolving nature of collaborative
+information in the actual world, we intend to investigate
+5.Training utilizes two Nvidia A100 80G GPUs, while testing is
+performedonasingleGPUofthesametype. CoLLM’sincrementallearningcapabilities.
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 11
+REFERENCES in recommender systems,” in Proceedings of the 17th ACM
+ConferenceonRecommenderSystems,2023,p.1126–1132.
+[1] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. Wainwright, [18] Y. Gao, T. Sheng, Y. Xiang, Y. Xiong, H. Wang, and
+P.Mishkin,C.Zhang,S.Agarwal,K.Slama,A.Rayetal., J. Zhang, “Chat-rec: Towards interactive and explainable
+“Traininglanguagemodelstofollowinstructionswithhu- llms-augmentedrecommendersystem,”arXiv,2023.
+man feedback,” Advances in Neural Information Processing [19] W.-C. Kang, J. Ni, N. Mehta, M. Sathiamoorthy, L. Hong,
+Systems,pp.27730–27744,2022. E. Chi, and D. Z. Cheng, “Do llms understand user pref-
+[2] T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, erences?evaluatingllmsonuserratingprediction,”arXiv,
+P.Dhariwal,A.Neelakantan,P.Shyam,G.Sastry,A.Askell 2023.
+etal.,“Languagemodelsarefew-shotlearners,”Advances [20] K. Bao, J. Zhang, W. Wang, Y. Zhang, Z. Yang, Y. Luo,
+inneuralinformationprocessingsystems,pp.1877–1901,2020. F. Feng, X. He, and Q. Tian, “A bi-step grounding
+[3] H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A. paradigm for large language models in recommendation
+Lachaux, T. Lacroix, B. Rozie`re, N. Goyal, E. Hambro, systems,”arXiv:2308.08434,2023.
+F. Azhar et al., “Llama: Open and efficient foundation [21] J. Zhang, R. Xie, Y. Hou, W. X. Zhao, L. Lin, and J.-R.
+languagemodels,”arXiv:2302.13971,2023. Wen, “Recommendation as instruction following: A large
+[4] W. X. Zhao, K. Zhou, J. Li, T. Tang, X. Wang, Y. Hou, languagemodelempoweredrecommendationapproach,”
+Y. Min, B. Zhang, J. Zhang, Z. Dong et al., “A survey of arXiv:2305.07001,2023.
+largelanguagemodels,”arXiv:2303.18223,2023. [22] J.Lin,R.Shan,C.Zhu,K.Du,B.Chen,S.Quan,R.Tang,
+[5] J. Li, D. Li, S. Savarese, and S. C. H. Hoi, “Blip-2: Boot- Y. Yu, and W. Zhang, “Rella: Retrieval-enhanced large
+strappinglanguage-imagepre-trainingwithfrozenimage languagemodelsforlifelongsequentialbehaviorcompre-
+encodersandlargelanguagemodels,”inInternationalCon- hensioninrecommendation,”inTheWebConference2024.
+ferenceonMachineLearning,2023,pp.19730–19742. [23] X.Li,B.Chen,L.Hou,andR.Tang,“Ctrl:Connecttabular
+[6] K. Singhal, S. Azizi, T. Tu, S. S. Mahdavi, J. Wei, H. W. andlanguagemodelforctrprediction,”arXiv,2023.
+Chung, N. Scales, A. Tanwani, H. Cole-Lewis, S. Pfohl [24] L.Wu,X.He,X.Wang,K.Zhang,andM.Wang,“Asurvey
+etal.,“Largelanguagemodelsencodeclinicalknowledge,” on accuracy-oriented neural recommendation: From col-
+Nature,vol.620,no.7972,pp.172–180,2023. laborative filtering to information-rich recommendation,”
+[7] I.Singh,V.Blukis,A.Mousavian,A.Goyal,D.Xu,J.Trem- IEEETrans.Knowl.DataEng.,vol.35,pp.4425–4445,2023.
+blay, D. Fox, J. Thomason, and A. Garg, “Progprompt: [25] X.Luo,Y.Zhou,Z.Liu,andM.Zhou,“Fastandaccurate
+Generatingsituatedrobottaskplansusinglargelanguage non-negative latent factor analysis of high-dimensional
+models,” in 2023 IEEE International Conference on Robotics andsparsematricesinrecommendersystems,”IEEETrans.
+andAutomation(ICRA),2023,pp.11523–11530. Knowl.DataEng.,vol.35,no.4,pp.3897–3911,2023.
+[8] L.Yang,H.Chen,Z.Li,X.Ding,andX.Wu,“Giveusthe [26] G. Dele´tang, A. Ruoss, P.-A. Duquenne, E. Catt, T. Ge-
+facts: Enhancing large language models with knowledge newein, C. Mattern, J. Grau-Moya, L. K. Wenliang,
+graphs for fact-aware language modeling,” IEEE Transac- M. Aitchison, L. Orseau et al., “Language modeling is
+tionsonKnowledgeandDataEngineering,pp.1–20,2024. compression,”arXiv:2309.10668,2023.
+[9] S. Sanner, K. Balog, F. Radlinski, B. Wedin, and L. Dixon, [27] J. Xu, H. Zhou, C. Gan, Z. Zheng, and L. Li, “Vocabulary
+“Large language models are competitive near cold-start learningviaoptimaltransportforneuralmachinetransla-
+recommendersforlanguage-anditem-basedpreferences,” tion,”inACL/IJCNLP2021,2021,pp.7361–7373.
+in Proceedings of the 17th ACM Conference on Recommender [28] X. He, K. Deng, X. Wang, Y. Li, Y. Zhang, and M. Wang,
+Systems,2023,pp.890–896. “Lightgcn: Simplifying and powering graph convolution
+[10] L.Wu,Z.Zheng,Z.Qiu,H.Wang,H.Gu,T.Shen,C.Qin, network for recommendation,” in Proceedings of the 43rd
+C.Zhu,H.Zhu,Q.Liuetal.,“Asurveyonlargelanguage InternationalACMSIGIRconferenceonresearchanddevelop-
+modelsforrecommendation,”arXiv:2305.19860,2023. mentinInformationRetrieval,2020,pp.639–648.
+[11] Z. Zhao, W. Fan, J. Li, Y. Liu, X. Mei, Y. Wang, Z. Wen, [29] J. Lin, X. Dai, Y. Xi, W. Liu, B. Chen, X. Li, C. Zhu,
+F. Wang, X. Zhao, J. Tang, and Q. Li, “Recommender H. Guo, Y. Yu, R. Tang et al., “How can recommender
+systemsintheeraoflargelanguagemodels(llms),”IEEE systems benefit from large language models: A survey,”
+Trans.Knowl.DataEng.,pp.1–20,2024. arXiv:2306.05817,2023.
+[12] K.Bao,J.Zhang, Y.Zhang,W.Wang,F. Feng,andX.He, [30] Q.Ai,T.Bai,Z.Cao,Y.Chang,J.Chen,Z.Chen,Z.Cheng,
+“Tallrec: An effective and efficient tuning framework to S.Dong,Z.Dou,F.Fengetal.,“Informationretrievalmeets
+align large language model with recommendation,” in large language models: A strategic report from chinese ir
+Proceedings of the 17th ACM Conference on Recommender community,”AIOpen,vol.4,pp.80–90,2023.
+Systems,2023,p.1007–1014. [31] J. Liu, C. Liu, R. Lv, K. Zhou, and Y. Zhang, “Is
+[13] J.Zhang,K.Bao, Y.Zhang,W.Wang,F. Feng,andX.He, chatgpt a good recommender? a preliminary study,”
+“Is chatgpt fair for recommendation? evaluating fairness arXiv:2304.10149,2023.
+inlargelanguagemodelrecommendation,”inProceedings [32] Y.Feng,S.Liu,Z.Xue,Q.Cai,L.Hu,P.Jiang,K.Gai,and
+of the 17th ACM Conference on Recommender Systems, 2023, F.Sun,“Alargelanguagemodelenhancedconversational
+pp.993–999. recommendersystem,”CoRR,vol.abs/2308.06212,2023.
+[14] Y. Koren, R. Bell, and C. Volinsky, “Matrix factorization [33] X.Huang,J.Lian,Y.Lei,J.Yao,D.Lian,andX.Xie,“Rec-
+techniques for recommender systems,” Computer, vol. 42, ommenderaiagent:Integratinglargelanguagemodelsfor
+no.8,pp.30–37,2009. interactiverecommendations,”arXiv:2308.16505,2023.
+[15] R. He and J. McAuley, “Ups and downs: Modeling the [34] J. Wei, J. Wei, Y. Tay, D. Tran, A. Webson, Y. Lu, X. Chen,
+visual evolution of fashion trends with one-class collab- H.Liu,D.Huang,D.Zhouetal.,“Largerlanguagemodels
+orative filtering,” in proceedings of the 25th international doin-contextlearningdifferently,”arXiv:2303.03846,2023.
+conferenceonworldwideweb,2016,pp.507–517. [35] Y. Zhu, L. Wu, Q. Guo, L. Hong, and J. Li, “Collabora-
+[16] Y.Zhang,H.DING,Z.Shui,Y.Ma,J.Zou,A.Deoras,and tive large language model for recommender systems,” in
+H. Wang, “Language models as recommender systems: Proceedings of the ACM on Web Conference 2024, 2024, pp.
+Evaluations and limitations,” in I (Still) Can’t Believe It’s 3162–3172.
+NotBetter!NeurIPS2021Workshop,2021. [36] B. Zheng, Y. Hou, H. Lu, Y. Chen, W. X. Zhao, M. Chen,
+[17] S. Dai, N. Shao, H. Zhao, W. Yu, Z. Si, C. Xu, Z. Sun, and J.-R. Wen, “Adapting large language models by inte-
+X. Zhang, and J. Xu, “Uncovering chatgpt’s capabilities grating collaborative semantics for recommendation,” in
+
+JOURNALOFLATEXCLASSFILES,VOL.18,NO.9,SEPTEMBER2020 12
+2024IEEE40thInternationalConferenceonDataEngineering understanding,”inNAACL-HLT,2019,pp.4171–4186.
+(ICDE). IEEE,2024,pp.1435–1448. [55] S.Geng,S.Liu,Z.Fu,Y.Ge,andY.Zhang,“Recommenda-
+[37] A. Muhamed, I. Keivanloo, S. Perera, J. Mracek, Y. Xu, tionaslanguageprocessing(rlp):Aunifiedpretrain,per-
+Q.Cui,S.Rajagopalan,B.Zeng,andT.Chilimbi,“Ctr-bert: sonalizedprompt&predictparadigm(p5),”inProceedings
+Cost-effectiveknowledgedistillationforbillion-parameter of the 16th ACM Conference on Recommender Systems, 2022,
+teachermodels,”inNeurIPSEfficientNaturalLanguageand pp.299–315.
+SpeechProcessingWorkshop,2021. [56] D. P. Kingma and J. Ba, “Adam: A method for stochastic
+[38] S.Wu,H.Fei,L.Qu,W.Ji,andT.-S.Chua,“Next-gpt:Any- optimization,”inICLR,2015.
+to-anymultimodalllm,”arXiv:2309.05519,2023. [57] T. G. Dietterich, “Ensemble methods in machine learn-
+[39] D. Zhu, J. Chen, X. Shen, X. Li, and M. Elhoseiny, ing,”inInternationalworkshoponmultipleclassifiersystems.
+“MiniGPT-4: Enhancing vision-language understanding Springer,2000,pp.1–15.
+with advanced large language models,” in The Twelfth [58] Y. Xu, L. Zhu, Z. Cheng, J. Li, Z. Zhang, and H. Zhang,
+InternationalConferenceonLearningRepresentations,2024. “Multi-modal discrete collaborative filtering for efficient
+[40] D.Zhang,S.Li,X.Zhang,J.Zhan,P.Wang,Y.Zhou,and cold-start recommendation,” IEEE Transactions on Knowl-
+X. Qiu, “SpeechGPT: Empowering large language mod- edgeandDataEngineering,vol.35,no.1,pp.741–755,2023.
+els with intrinsic cross-modal conversational abilities,” in [59] A.Yang,B.Yang,B.Hui,B.Zheng,B.Yu,C.Zhou,C.Li,
+EMNLP,2023. C. Li, D. Liu, F. Huang et al., “Qwen2 technical report,”
+[41] D. Driess, F. Xia, M. S. M. Sajjadi, C. Lynch, A. Chowd- arXivpreprintarXiv:2407.10671,2024.
+hery, B. Ichter, A. Wahid, J. Tompson, Q. Vuong, T. Yu,
+W. Huang, Y. Chebotar, P. Sermanet, D. Duckworth, YangZhangisaResearchFellowattheNationalUniversityofSinga-
+S.Levine,V.Vanhoucke,K.Hausman,M.Toussaint,K.Gr- pore. He obtained his PhD from the University of Science and Tech-
+eff, A. Zeng, I. Mordatch, and P. Florence, “Palm-e: an nologyofChina(USTC).Hisresearchinterestliesintherecommender
+embodied multimodal language model,” in Proceedings of system. He has authored over ten publications featured in top confer-
+the40thInternationalConferenceonMachineLearning,2023. ences and journals like SIGIR and TKDE, with one winning the Best
+[42] W.-L. Chiang, Z. Li, Z. Lin, Y. Sheng, Z. Wu, H. Zhang, PaperHonorableMentionatSIGIR2021.Hehasservedastheprogram
+committeemember,andreviewerfortopconferences/journals,including
+L. Zheng, S. Zhuang, Y. Zhuang, J. E. Gonzalez,
+KDD,SIGIR,TKDE,TOIS,etc.
+I. Stoica, and E. P. Xing, “Vicuna: An open-source
+chatbot impressing gpt-4 with 90%* chatgpt quality,” Fuli Feng is a professor at the University of Science and Technology
+March2023.[Online].Available:https://lmsys.org/blog/ of China (USTC). His research interests include information retrieval
+and data mining. He has about 100 publications that appeared in top
+2023-03-30-vicuna/
+conferences such as SIGIR, WWW, and journals including TKDE and
+[43] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang,
+TOIS.HereceivedtheBestPaperHonourableMentioninSIGIR2021
+L. Wang, and W. Chen, “Lora: Low-rank adaptation of
+andtheBestPosterAwardinWWW2018.Moreover,Hehasservedas
+largelanguagemodels,”inICLR,2022. the Associate Editor for ACM TORS, the SPC/PC-member for top-tier
+[44] I. Gim, G. Chen, S.-s. Lee, N. Sarda, A. Khandelwal, and conferences including SIGIR, WWW, SIGKDD, NeurIPS, ICLR, ICML,
+L.Zhong,“Promptcache:Modularattentionreuseforlow- ACL, and the invited reviewer for prestigious journals such as TOIS,
+latencyinference,”arXiv:2311.04934,2023. TKDE,TPAMI,TNNLS.
+[45] F.M.HarperandJ.A.Konstan,“Themovielensdatasets:
+Historyandcontext,”Acmtransactionsoninteractiveintelli- JizhiZhangisaPh.D.studentattheUniversityofScienceandTechnol-
+gentsystems(tiis),vol.5,no.4,pp.1–19,2015. ogyofChina(USTC),supervisedbyProf.FuliFengandProf.Xiangnan
+[46] W.Wang,Y.Xu,F.Feng,X.Lin,X.He,andT.-S.Chua,“Dif- He. His research interest lies in the recommender system and LLMs.
+fusionrecommendermodel,”inSIGIR,2023,p.832–841. HehasseveralpublicationsintopconferencessuchasSIGIR,RecSys,
+[47] Y.Ji,A.Sun,J.Zhang,andC.Li,“Acriticalstudyondata andACL.Healsoservesasareviewerforacademicjournalsincluding
+TOISandTORS.
+leakageinrecommendersystemofflineevaluation,”ACM
+KeqinBaoisaPh.D.studentatUniversityofScienceandTechnology
+Trans.Inf.Syst.,vol.41,no.3,pp.75:1–75:27,2023.
+ofChina(USTC),supervisedbyProf.FuliFengandProf.XiangnanHe.
+[48] Y. Zhang, F. Feng, C. Wang, X. He, M. Wang, Y. Li,
+His research interest lies in the recommender system and LLMs. He
+and Y. Zhang, “How to retrain recommender system? a
+has several publications in top conferences such as RecSys, EMNLP
+sequential meta-learning method,” in Proceedings of the andWWW.HehasservedasthePCmemberandreviewerforthetop
+43rd International ACM SIGIR Conference on Research and conferencesandjournalsincludingTOISandRecSys.
+DevelopmentinInformationRetrieval,2020,pp.1479–1488. QifanWangisaResearchScientistatMetaAI,leadingateambuilding
+[49] Y. Liu, Q. Liu, Y. Tian, C. Wang, Y. Niu, Y. Song, and innovativeDeepLearningandNaturalLanguageProcessingmodelsfor
+C.Li,“Concept-awaredenoisinggraphneuralnetworkfor Recommendation System. He received his PhD in computer science
+micro-video recommendation,” in Proceedings of the 30th from Purdue University in 2015. His research interests include deep
+ACM International Conference on Information & Knowledge learning, natural language processing, information retrieval, data min-
+Management,2021,pp.1099–1108. ing, and computer vision. He has co-authored over 100 publications
+in top-tier conferences and journals, including NeurIPS, ICLR, ICML,
+[50] K. Ja¨rvelin and J. Keka¨la¨inen, “Cumulated gain-based
+ACL, CVPR, SIGKDD, WWW, SIGIR, TPAMI, TKDE, TOIS, etc. He
+evaluation of ir techniques,” ACM Transactions on Infor-
+alsoservesasareachair,programcommitteemember,editorialboard
+mationSystems(TOIS),vol.20,no.4,pp.422–446,2002.
+member,andreviewerforacademicconferencesandjournals.
+[51] W.-C.KangandJ.McAuley,“Self-attentivesequentialrec-
+ommendation,”inICDM,2018,pp.197–206. XiangnanHeisaProfessorattheUniversityofScienceandTechnology
+[52] G. Zhou, X. Zhu, C. Song, Y. Fan, H. Zhu, X. Ma, Y. Yan, of China (USTC). His research interests span recommender system,
+J.Jin,H.Li,andK.Gai,“Deepinterestnetworkforclick- data mining, and multi-media analytics. He has over 100 publications
+that have appeared in top conferences such as SIGIR, WWW, and
+through rate prediction,” in Proceedings of the 24th ACM
+KDD,andjournalsincludingTKDEandTOIS.Hisworkonrecommender
+SIGKDD international conference on knowledge discovery &
+systemshasreceivedtheBestPaperAwardHonorableMentioninSI-
+datamining,2018,pp.1059–1068.
+GIR2023/2021/2016andWWW2018.HehasservedastheAssociate
+[53] Z. Zhang and B. Wang, “Prompt learning for news rec- EditorforjournalsincludingACMTOIS,IEEETKDE,etc.Moreover,he
+ommendation,”inProceedingsofthe46thInternationalACM has served as SPC/PC member for several top conferences including
+SIGIRConferenceonResearchandDevelopmentinInformation SIGIR,WWW,KDD,MM,WSDM,ICMLetc.,andtheregularreviewer
+Retrieval. ACM,2023,pp.227–237. for journals including TKDE, TOIS, etc and (senior) PC member for
+[54] J.Devlin,M.Chang,K.Lee,andK.Toutanova,“BERT:pre- conferences including SIGIR, WWW, KDD, MM, etc. He is a senior
+training of deep bidirectional transformers for language memberofIEEE.

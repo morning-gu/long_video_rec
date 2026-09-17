@@ -60,16 +60,55 @@ class LLMService:
     # ---- 基础调用 ----
 
     def _chat(self, prompt: str) -> str:
-        """单次对话调用；qwen3 系列尝试关闭思考模式以降低时延。"""
+        """单次对话调用；qwen3 系列关闭思考模式以降低时延。
+
+        仅当 enable_thinking 参数不被端点支持（4xx 参数错误/TypeError）时
+        才去掉参数重试；超时/网络错误直接抛给上层降级——否则最坏 2×25s
+        双超时放大（本机慢网络下曾被观测到）。
+        """
         kwargs = dict(model=self.model,
                       messages=[{"role": "user", "content": prompt}],
                       temperature=0.3)
         try:
             r = self.client.chat.completions.create(
                 **kwargs, extra_body={"enable_thinking": False})
-        except Exception:
+        except TypeError:
             r = self.client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if getattr(e, "status_code", None) in (400, 404, 422):
+                r = self.client.chat.completions.create(**kwargs)
+            else:
+                raise
         return r.choices[0].message.content or ""
+
+    def _log_fail(self, purpose: str, err) -> None:
+        """降级原因落库（llm_failures 表）：事后可查"AI 为什么降级"。"""
+        try:
+            with self._lock:
+                self.db.execute("CREATE TABLE IF NOT EXISTS llm_failures ("
+                                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                "ts INTEGER, purpose TEXT, err TEXT)")
+                self.db.execute(
+                    "INSERT INTO llm_failures (ts, purpose, err) VALUES (?,?,?)",
+                    (int(time.time()), purpose, str(err)[:300]))
+                self.db.commit()
+        except Exception:
+            pass
+
+    def recent_failures(self, limit: int = 20) -> list:
+        """最近的降级记录（新→旧）。"""
+        import datetime
+        try:
+            with self._lock:
+                rows = self.db.execute(
+                    "SELECT ts, purpose, err FROM llm_failures "
+                    "ORDER BY id DESC LIMIT ?",
+                    (min(limit, 100),)).fetchall()
+        except Exception:
+            return []
+        return [{"time": datetime.datetime.fromtimestamp(t).strftime(
+                    "%m-%d %H:%M:%S"),
+                 "purpose": p, "error": e} for t, p, e in rows]
 
     def _cached(self, key: str):
         with self._lock:
@@ -135,9 +174,13 @@ class LLMService:
             genres = [g for g in (obj.get("genres") or [])
                       if g in KNOWN_GENRES]
             mood = str(obj.get("mood", ""))[:12]
+            if not genres:
+                self._log_fail("query",
+                               f"类型白名单过滤后为空: {str(obj.get('genres'))[:150]}")
             self._put(key, {"genres": genres, "mood": mood})
             return {"genres": genres, "mood": mood}
-        except Exception:
+        except Exception as e:
+            self._log_fail("query", f"{type(e).__name__}: {e}")
             return None
 
     def _rerank(self, user_id: int, movies: list, profile_titles: list):
@@ -169,8 +212,10 @@ class LLMService:
                 order = [int(x) for x in order]
                 self._put(key, {"order": order})
                 return order, False
-        except Exception:
-            pass
+            self._log_fail("rerank", "校验失败: " + (
+                "响应无 JSON" if obj is None else f"order={str(order)[:150]}"))
+        except Exception as e:
+            self._log_fail("rerank", f"{type(e).__name__}: {e}")
         return None, True
 
     def _reasons(self, user_id: int, movies: list, profile_titles: list,
@@ -182,7 +227,12 @@ class LLMService:
         key = self._key("reason", user_id, mids)
         cached = self._cached(key)
         if cached is not None:
-            return cached["reasons"], False
+            reasons = {int(k): v for k, v in cached["reasons"].items()}
+            # 兼容旧缓存：回填按片理由（详情页 reason_for 取用）
+            for mid, text in reasons.items():
+                self._put(self._key("reason1", user_id, [mid]),
+                          {"reason": text})
+            return reasons, False
         cand = [f"- {i} | {by_id[i]['title']} | "
                 f"{'/'.join(by_id[i]['genres'][:3])}" for i in mids]
         prompt = (
@@ -203,7 +253,51 @@ class LLMService:
                 if reasons:
                     self._put(key, {"reasons":
                                     {str(k): v for k, v in reasons.items()}})
+                    # 额外按 (用户, 影片) 落一份：详情页可直接取用（§4.5）
+                    for mid, text in reasons.items():
+                        self._put(self._key("reason1", user_id, [mid]),
+                                  {"reason": text})
                     return reasons, False
-        except Exception:
-            pass
+                self._log_fail("reason",
+                               f"校验失败: 无有效 id，raw={str(raw)[:150]}")
+            else:
+                self._log_fail("reason",
+                               f"响应无 reasons 字段: {str(obj)[:150]}")
+        except Exception as e:
+            self._log_fail("reason", f"{type(e).__name__}: {e}")
         return {}, True
+
+    # ---- 详情页：理由取用 / AI 简介 ----
+
+    def reason_for(self, user_id: int, movie_id: int):
+        """该用户该影片的推荐理由（由 _reasons 生成时按片落库）。"""
+        if not self.available:
+            return None
+        cached = self._cached(self._key("reason1", user_id, [movie_id]))
+        return cached.get("reason") if cached else None
+
+    def synopsis(self, movie_id: int, title: str, genres: list):
+        """AI 简介（按电影缓存，与用户无关）；不确定的影片返回 None。
+
+        数据边界：无剧情简介数据源（TMDB 在本网络被阻断），由 LLM 生成并
+        在前端显式标注"AI 简介"；不确定时宁缺毋滥（空串 → None → 槽位隐藏）。
+        """
+        if not self.available:
+            return None
+        key = self._key("synopsis", 0, [movie_id])
+        cached = self._cached(key)
+        if cached is not None:
+            return cached.get("synopsis") or None
+        prompt = (
+            f"用一两句中文（不超过 60 字）介绍电影《{title}》"
+            f"（类型：{'/'.join(genres[:3]) if genres else '未知'}）。\n"
+            "如果你不认识这部电影，不要编造。\n"
+            '只输出 JSON：{"synopsis": "..."}；不认识则输出 {"synopsis": ""}。')
+        try:
+            obj = _extract_json(self._chat(prompt))
+            s = str(obj.get("synopsis", "")).strip()[:90] if obj else ""
+            self._put(key, {"synopsis": s})
+            return s or None
+        except Exception as e:
+            self._log_fail("synopsis", f"{type(e).__name__}: {e}")
+            return None

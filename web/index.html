@@ -225,6 +225,119 @@
   }
   .clearq:hover { color: var(--text); border-color: #5a5a66; }
 
+  /* ---------- 详情浮层 ---------- */
+  body.lock { overflow: hidden; }
+  .dmodal { position: fixed; inset: 0; z-index: 40; display: none; }
+  .dmodal.open { display: block; }
+  .dbackdrop { position: absolute; inset: 0; background: rgba(6, 6, 8, .8); }
+  .dpanel {
+    position: relative; margin: 4vh auto 0; width: min(860px, 94vw);
+    max-height: 92vh; overflow-y: auto;
+    background: #141417; border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px 26px 20px;
+    animation: rise .25s ease;
+  }
+  .dclose {
+    position: absolute; top: 14px; right: 14px; z-index: 2;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(0, 0, 0, .55); color: #bbb; border: none; font-size: 13px;
+  }
+  .dclose:hover { color: #fff; background: rgba(229, 9, 20, .75); }
+  .dmain { display: flex; gap: 24px; }
+  .dposter {
+    width: 236px; flex-shrink: 0; aspect-ratio: 2 / 3;
+    border-radius: 10px; overflow: hidden; position: relative;
+    background: linear-gradient(160deg, #232329, #151518);
+  }
+  .dposter img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  .dposter .ph {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 26px; font-weight: 700;
+    color: rgba(255, 255, 255, .5); text-align: center; padding: 0 12px;
+  }
+  .dinfo { flex: 1; min-width: 0; padding-top: 4px; }
+  .dinfo h3 { font-size: 21px; line-height: 1.3; margin-bottom: 10px; }
+  .dinfo h3 .yr { color: var(--text-faint); font-weight: 400; font-size: 15px; }
+  .gchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .gchip {
+    font-size: 11.5px; color: var(--text-dim); border: 1px solid var(--border);
+    border-radius: 14px; padding: 2px 10px;
+  }
+  .dstats { font-size: 12.5px; color: var(--text-dim); line-height: 1.9; }
+  .dstats b { color: var(--warn); font-weight: 600; }
+  .dflags { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .dflags .tag { font-size: 11px; border-radius: 5px; padding: 2px 8px; }
+  .dflags .seen { background: rgba(74, 222, 128, .12); color: var(--good); }
+  .dflags .mark { background: rgba(139, 92, 246, .14); color: #b9a3f2; }
+  .dflags .supp { background: rgba(229, 9, 20, .12); color: #ff8d86; }
+  .dslot {
+    margin: 2px 0 12px; padding: 9px 12px; border-radius: 8px;
+    font-size: 12.5px; line-height: 1.65;
+  }
+  .dslot.reason {
+    background: rgba(244, 176, 74, .07); border-left: 3px solid var(--warn);
+    color: #d9b877;
+  }
+  .dslot.brief {
+    background: rgba(129, 140, 248, .06); border-left: 3px solid #6a6bd8;
+    color: var(--text-dim);
+  }
+  .dslot .rlabel {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    margin-right: 8px; opacity: .75;
+  }
+  .dslot .dim { color: var(--text-faint); font-size: 12px; }
+  .dactions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .act { padding: 9px 18px; border-radius: 9px; font-weight: 600; font-size: 13.5px; }
+  .act.like { background: rgba(74, 222, 128, .12); border-color: #3f7a52; color: #7ee09a; }
+  .act.like:hover { background: rgba(74, 222, 128, .2); }
+  .act.dislike { background: rgba(229, 9, 20, .1); border-color: #7a3f42; color: #ff9a93; }
+  .act.dislike:hover { background: rgba(229, 9, 20, .18); }
+  .act.watched { background: var(--bg-hover); border-color: var(--border); color: var(--text-dim); }
+  .drate {
+    margin-top: 16px; display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; color: var(--text-dim); flex-wrap: wrap;
+  }
+  .stars { display: flex; gap: 2px; }
+  .stars button {
+    background: none; border: none; font-size: 21px; line-height: 1;
+    color: #35353d; padding: 0 1px; cursor: pointer;
+    transition: color .1s, transform .1s;
+  }
+  .stars button.on { color: var(--warn); }
+  .stars button:hover { transform: scale(1.18); }
+  .rhint { font-size: 11px; color: var(--text-faint); }
+  .dsimilar {
+    margin-top: 22px; border-top: 1px solid var(--border-soft); padding-top: 16px;
+  }
+  .dsimilar h4 {
+    font-size: 12.5px; color: var(--text-faint); margin-bottom: 11px;
+    font-weight: 600; letter-spacing: .4px;
+  }
+  .mini { width: 112px; flex-shrink: 0; cursor: pointer; }
+  .mini .mp {
+    position: relative; height: 158px; border-radius: 7px; overflow: hidden;
+    background: linear-gradient(160deg, #232329, #151518); margin-bottom: 6px;
+    transition: transform .15s;
+  }
+  .mini:hover .mp { transform: translateY(-3px); }
+  .mini .mp img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  }
+  .mini .mp .ph {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 700;
+    color: rgba(255, 255, 255, .5);
+  }
+  .mini .mt {
+    font-size: 11px; line-height: 1.4; color: var(--text-dim);
+    height: 30px; overflow: hidden;
+  }
+  .mini:hover .mt { color: var(--text); }
+
   /* ---------- 骨架屏 ---------- */
   .sk-card {
     min-width: 170px; height: 385px; flex-shrink: 0;
@@ -280,6 +393,7 @@
   <div id="profile" class="profile"></div>
 </header>
 <main id="rows"></main>
+<div class="dmodal" id="detailModal"></div>
 <div id="toast"></div>
 
 <script>
@@ -406,7 +520,7 @@ function card(m) {
              onload="this.classList.add('loaded')" onerror="this.remove()">`
     : '';
   return `<div class="card" data-id="${m.movie_id}"
-              title="${esc(m.title)}&#10;点击记为已看，推荐将实时更新">
+              title="${esc(m.title)}&#10;点击查看详情">
     <div class="poster">
       <button class="no" title="不感兴趣（负反馈）">✕</button>
       <div class="ph" style="background:linear-gradient(155deg,hsl(${hue},32%,26%),hsl(${hue},20%,12%))">${esc(g)}</div>
@@ -420,6 +534,152 @@ function card(m) {
       <span class="badge ${esc(m.source)}">${srcName(m.source)}</span>
     </div>
   </div>`;
+}
+
+// ---- 详情浮层（动作体系：喜欢/看完/不感兴趣/评分，便于继续扩展）----
+
+let detail = null;
+
+async function openDetail(mid) {
+  try {
+    detail = await (await fetch(`/api/movie/${mid}?user_id=${curUser}`)).json();
+  } catch (e) {
+    toast('详情加载失败');
+    return;
+  }
+  renderDetail();
+}
+
+function closeModal() {
+  $('detailModal').classList.remove('open');
+  document.body.classList.remove('lock');
+  detail = null;
+}
+
+function yearOf(title) {
+  const m = String(title).match(/\((\d{4})\)\s*$/);
+  return m ? m[1] : '';
+}
+
+function miniCard(m) {
+  const hue = (m.movie_id * 47) % 360;
+  const g = m.genres[0] || '—';
+  return `<div class="mini" data-id="${m.movie_id}" title="${esc(m.title)}">
+    <div class="mp">
+      <div class="ph" style="background:linear-gradient(155deg,hsl(${hue},32%,26%),hsl(${hue},20%,12%))">${esc(g)}</div>
+      ${m.poster ? `<img src="${esc(m.poster)}" loading="lazy" alt="" onerror="this.remove()">` : ''}
+    </div>
+    <div class="mt">${esc(m.title)}</div>
+  </div>`;
+}
+
+function renderDetail() {
+  const d = detail;
+  const y = yearOf(d.title);
+  const hue = (d.movie_id * 47) % 360;
+  const g0 = d.genres[0] || '—';
+  // 关系归因标签（消除"已看过"歧义）：历史评分 vs 演示期动作
+  const flags = [];
+  if (d.history_rating)
+    flags.push(`<span class="tag seen">看过 · 你评过 ${d.history_rating} 分</span>`);
+  if (d.marked) {
+    const m = d.marked;
+    const neg = m.action === 'dislike' ||
+                (m.action === 'rate' && m.value <= 2);
+    const lbl = m.action === 'rate' ? `你评了 ${m.value} 星`
+      : {like: '已标记 👍 喜欢', watched: '已标记 ✅ 看完',
+         dislike: '⊘ 已屏蔽', click: '已标记看过'}[m.action] || m.action;
+    flags.push(`<span class="tag ${neg ? 'supp' : 'mark'}">${lbl}</span>`);
+  }
+  $('detailModal').innerHTML = `
+    <div class="dbackdrop" onclick="closeModal()"></div>
+    <div class="dpanel">
+      <button class="dclose" onclick="closeModal()" title="关闭 (Esc)">✕</button>
+      <div class="dmain">
+        <div class="dposter">
+          <div class="ph" style="background:linear-gradient(155deg,hsl(${hue},32%,26%),hsl(${hue},20%,12%))">${esc(g0)}</div>
+          ${d.poster ? `<img src="${esc(d.poster)}" alt="">` : ''}
+        </div>
+        <div class="dinfo">
+          <h3>${esc(d.title)} ${y ? `<span class="yr">(${y})</span>` : ''}</h3>
+          <div class="gchips">
+            ${d.genres.map(g => `<span class="gchip">${esc(g)}</span>`).join('')}
+          </div>
+          <div class="dslot reason" id="dslot"></div>
+          <div class="dstats">
+            口碑 <b>${d.wr.toFixed(1)}</b> / 5 &nbsp;·&nbsp;
+            ${d.pos_count} 人好评 &nbsp;·&nbsp; 热门排名 #${d.pop_rank}
+          </div>
+          ${flags.length ? `<div class="dflags">${flags.join('')}</div>` : ''}
+          <div class="dactions">
+            <button class="act like" onclick="detailAction('like')">👍 喜欢</button>
+            <button class="act watched" onclick="detailAction('watched')">✅ 看完</button>
+            <button class="act dislike" onclick="detailAction('dislike')">👎 不感兴趣</button>
+          </div>
+          <div class="drate">
+            <span>评分：</span>
+            <span class="stars">${[1, 2, 3, 4, 5].map(v =>
+              `<button onclick="detailAction('rate', ${v})"
+                       onmouseenter="starHover(${v})" onmouseleave="starHover(0)">★</button>`
+            ).join('')}</span>
+            <span class="rhint">≥4 星记为正反馈 · ≤2 星记为负反馈</span>
+          </div>
+        </div>
+      </div>
+      ${d.similar.length ? `
+      <div class="dsimilar">
+        <h4>相似推荐（ItemCF · 共现相似）</h4>
+        <div class="row">${d.similar.map(miniCard).join('')}</div>
+      </div>` : ''}
+    </div>`;
+  // 槽位优先级：✨ 推荐理由 → AI 简介（异步生成）→ 隐藏
+  const slot = $('dslot');
+  if (d.reason) {
+    slot.innerHTML = `<span class="rlabel">✨ 推荐理由</span>${esc(d.reason)}`;
+  } else {
+    slot.className = 'dslot brief';
+    slot.innerHTML = `<span class="dim">AI 简介生成中…</span>`;
+    fetchSynopsis(d.movie_id);
+  }
+  $('detailModal').classList.add('open');
+  document.body.classList.add('lock');
+}
+
+async function fetchSynopsis(mid) {
+  try {
+    const r = await (await fetch('/api/synopsis', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({movie_id: mid})
+    })).json();
+    const slot = $('dslot');
+    if (!slot || !detail || detail.movie_id !== mid) return;   // 已切换/关闭
+    if (r.synopsis) {
+      slot.innerHTML = `<span class="rlabel">AI 简介</span>${esc(r.synopsis)}`;
+    } else {
+      slot.style.display = 'none';      // 无数据：宁缺毋滥，隐藏槽位
+    }
+  } catch (e) {
+    const slot = $('dslot');
+    if (slot) slot.style.display = 'none';
+  }
+}
+
+function starHover(v) {
+  document.querySelectorAll('.stars button').forEach((b, i) =>
+    b.classList.toggle('on', i < v));
+}
+
+async function detailAction(action, value = null) {
+  const d = detail;
+  if (!d) return;
+  closeModal();
+  await postEvent(d.movie_id, action, value);
+  const label = {
+    like: '已标记 👍 喜欢', watched: '已标记 ✅ 看完',
+    dislike: '已记录 👎 负反馈', rate: `已评分 ${value} 星`,
+  }[action];
+  toast(label + '，推荐已实时更新');
+  refresh();
 }
 
 // ---- LLM 增强（异步，主链路零依赖）----
@@ -456,10 +716,10 @@ async function llmEnhance() {
   }
 }
 
-async function postEvent(movieId, action) {
+async function postEvent(movieId, action, value = null) {
   await fetch('/api/event', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({user_id: curUser, movie_id: movieId, action})
+    body: JSON.stringify({user_id: curUser, movie_id: movieId, action, value})
   });
 }
 
@@ -474,19 +734,23 @@ function toast(msg) {
 
 document.addEventListener('click', async e => {
   const no = e.target.closest('.no');
-  if (no) {
+  if (no) {                                    // 卡片悬停 ✕：快捷负反馈
     e.stopPropagation();
     await postEvent(+no.closest('.card').dataset.id, 'dislike');
     toast('已记录负反馈，推荐已实时更新');
     refresh();
     return;
   }
-  const c = e.target.closest('.card');
-  if (c) {
-    await postEvent(+c.dataset.id, 'click');
-    toast('已记录点击，推荐已实时更新');
-    refresh();
-  }
+  const act = e.target.closest('.act');        // 详情页动作（已由 onclick 处理）
+  if (act) return;
+  const mini = e.target.closest('.mini');      // 详情页相似推荐：切换详情
+  if (mini) { openDetail(+mini.dataset.id); return; }
+  const c = e.target.closest('.card');         // 首页卡片：打开详情页
+  if (c) openDetail(+c.dataset.id);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
 });
 
 function setMode(m) {

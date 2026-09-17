@@ -31,9 +31,12 @@ class HotRecall:
     def __init__(self, hot: pd.DataFrame):
         self.wr_order = list(zip(hot.movie_id.astype(int), hot.wr.astype(float)))
         self.wr = dict(self.wr_order)
+        self.pos_count = {int(m): int(c) for m, c in
+                          zip(hot.movie_id, hot.pos_count)}
         # 热门排序按正反馈人数（流行度），wr 用于质量分
         self.pop_order = [int(m) for m in
                           hot.sort_values("pos_count", ascending=False).movie_id]
+        self.pop_rank = {m: i for i, m in enumerate(self.pop_order)}
         self.hot_set = set(self.pop_order[:config.HOT_SET_SIZE])
 
     def top(self, exclude: set, topn: int):

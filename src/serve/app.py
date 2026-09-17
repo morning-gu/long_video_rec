@@ -203,7 +203,80 @@ def recommend(user_id: int, mode: str = "full"):
 class Event(BaseModel):
     user_id: int
     movie_id: int
-    action: str    # click | dislike
+    action: str            # click | like | watched | dislike | rate
+    value: float | None = None   # rate 动作的 1~5 评分
+
+
+@app.post("/api/event")
+def event(e: Event):
+    """演示期动作回流（O1，动作语义注册表见 user_state.py）。
+
+    扩展新动作（如"分享"）：user_state.ALLOWED_ACTIONS 加一行 + _apply 分支。
+    """
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    from src.state.user_state import ALLOWED_ACTIONS
+    if e.action not in ALLOWED_ACTIONS:
+        raise HTTPException(400, f"action must be one of {sorted(ALLOWED_ACTIONS)}")
+    if e.action == "rate" and (e.value is None or not 1.0 <= e.value <= 5.0):
+        raise HTTPException(400, "rate requires value in [1, 5]")
+    REC.store.record(e.user_id, e.movie_id, e.action, e.value)
+    return {"ok": True}
+
+
+@app.get("/api/movie/{movie_id}")
+def movie_detail(movie_id: int, user_id: int = 0):
+    """电影详情页：元数据 + 用户关系（归因）+ LLM 理由 + ItemCF 相似推荐。
+
+    关系归因（消除"已看过"歧义）：
+    - history_rating：MovieLens 历史评分（用户真的看过并评过分）；
+    - marked：演示期最近一次动作（喜欢/看完/评分/屏蔽）。
+    """
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    info = REC.movie_info.get(movie_id)
+    if not info:
+        raise HTTPException(404, "movie not found")
+    state = REC.store.get(user_id) if user_id else None
+    exclude = (state.seen | state.suppress) if state else set()
+    exclude.add(movie_id)
+    similar = [REC._card({"movie_id": m, "score": s, "source": "itemcf"})
+               for m, s in REC.itemcf.neighbors(movie_id, exclude,
+                                                config.SUB_ROW_K)]
+    marked = REC.store.last_mark(user_id, movie_id) if user_id else None
+    return {
+        "movie_id": movie_id, "title": info["title"], "genres": info["genres"],
+        "poster": REC.posters.get(movie_id, ""),
+        "wr": round(REC.hot.wr.get(movie_id, 0.0), 2),
+        "pos_count": REC.hot.pos_count.get(movie_id, 0),
+        "pop_rank": REC.hot.pop_rank.get(movie_id, len(REC.hot.pop_order)) + 1,
+        "history_rating": (REC.store.rating_of(user_id, movie_id)
+                           if user_id else None),
+        "marked": ({"action": marked[0], "value": marked[1]}
+                   if marked else None),
+        "reason": (REC.llm.reason_for(user_id, movie_id)
+                   if user_id and REC.llm.available else None),
+        "similar": similar,
+    }
+
+
+class SynopsisReq(BaseModel):
+    movie_id: int
+
+
+@app.post("/api/synopsis")
+def synopsis(req: SynopsisReq):
+    """AI 简介（详情页兜底槽位）：无推荐理由时展示；按电影缓存，
+    不确定的影片返回 None（前端隐藏槽位，宁缺毋滥）。"""
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    info = REC.movie_info.get(req.movie_id)
+    if not info:
+        raise HTTPException(404, "movie not found")
+    if not REC.llm.available:
+        return {"synopsis": None}
+    return {"synopsis": REC.llm.synopsis(req.movie_id, info["title"],
+                                         info["genres"])}
 
 
 class LLMEnhanceReq(BaseModel):
@@ -339,14 +412,15 @@ def llm_enhance(req: LLMEnhanceReq):
     return {"order": order, "reasons": reasons, "degraded": degraded}
 
 
-@app.post("/api/event")
-def event(e: Event):
-    if REC is None:
-        raise HTTPException(503, "artifacts loading")
-    if e.action not in ("click", "dislike"):
-        raise HTTPException(400, "action must be click|dislike")
-    REC.store.record(e.user_id, e.movie_id, e.action)
-    return {"ok": True}
+@app.get("/api/llm_failures")
+def llm_failures(limit: int = 20):
+    """LLM 降级原因审计（R2）：最近 N 条失败记录（时间/环节/原因）。
+
+    排查"AI 为什么降级"用；正常应为空。
+    """
+    if REC is None or not REC.llm.available:
+        return {"failures": []}
+    return {"failures": REC.llm.recent_failures(limit)}
 
 
 @app.get("/api/users")

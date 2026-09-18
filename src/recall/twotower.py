@@ -113,11 +113,14 @@ def _sample_epoch(offsets, counts, rng: np.random.Generator) -> np.ndarray:
 
 
 def train_twotower(seqs: dict, genre_mh: np.ndarray, year_b: np.ndarray,
-                   n_users: int, epochs=30, batch=1024, lr=2e-3, seed=42):
+                   n_users: int, epochs=None, batch=1024, lr=2e-3, seed=42,
+                   dim=None):
     """训练并返回 (model, item_embs[n_items, dim])。"""
     torch.manual_seed(seed)
+    dim = dim or config.P["tt_dim"]
+    epochs = epochs or config.P["tt_epochs"]
     n_items, n_genres = genre_mh.shape
-    model = TwoTower(n_users, n_items, n_genres)
+    model = TwoTower(n_users, n_items, n_genres, dim=dim)
     genre_pad = torch.cat([torch.zeros(1, n_genres), torch.tensor(genre_mh)])
     year_pad = torch.cat([torch.zeros(1, dtype=torch.long),
                           torch.tensor(year_b.astype(np.int64))])
@@ -180,8 +183,14 @@ class TwoTowerRecall:
         self.genre_mh = genre_mh
         self.n_genres = genre_mh.shape[1]
         self.n_users = n_users
-        self.index = faiss.IndexFlatIP(item_embs.shape[1])
-        self.index.add(item_embs)
+        if config.P["faiss"] == "hnsw" and item_embs.shape[0] > 20000:
+            # 大规模：HNSW 近似检索（兑现 D1 预留）
+            self.index = faiss.IndexHNSWFlat(item_embs.shape[1], 32)
+            self.index.metric_type = faiss.METRIC_INNER_PRODUCT
+            self.index.add(item_embs)
+        else:
+            self.index = faiss.IndexFlatIP(item_embs.shape[1])
+            self.index.add(item_embs)
 
     @classmethod
     def load(cls):
@@ -190,7 +199,8 @@ class TwoTowerRecall:
         movie_ids = _movie_ids()
         n_users = int(pd.read_parquet(
             config.ART_DIR / "users.parquet").user_id.max())
-        model = TwoTower(n_users, len(movie_ids), genre_mh.shape[1])
+        model = TwoTower(n_users, len(movie_ids), genre_mh.shape[1],
+                         dim=config.P["tt_dim"])
         model.load_state_dict(torch.load(
             config.ART_DIR / "twotower.pt", map_location="cpu",
             weights_only=True))

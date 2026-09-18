@@ -61,19 +61,22 @@ def _movie_ids() -> np.ndarray:
 def load_sas_model():
     """加载训练好的 SASRec 权重（eval 态）。返回 (model, movie_ids)。"""
     movie_ids = _movie_ids()
-    model = SASRec(len(movie_ids))
+    model = SASRec(len(movie_ids), dim=config.P["sas_dim"],
+                   n_layers=config.P["sas_layers"])
     model.load_state_dict(torch.load(
         config.ART_DIR / "sasrec.pt", map_location="cpu", weights_only=True))
     return model.eval(), movie_ids
 
 
-def train_sasrec(seqs: dict, epochs=80, batch=128, lr=1e-3, seed=42):
+def train_sasrec(seqs: dict, epochs=None, batch=128, lr=1e-3, seed=42):
     """训练并返回 model。seqs: {user: [mid...] 升序}，仅使用长度 ≥2 的序列。"""
     torch.manual_seed(seed)
+    epochs = epochs or config.P["sas_epochs"]
     movie_ids = _movie_ids()
     n_items = len(movie_ids)
     mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
-    model = SASRec(n_items)
+    model = SASRec(n_items, dim=config.P["sas_dim"],
+                   n_layers=config.P["sas_layers"])
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, (s + 1) / WARMUP_STEPS))

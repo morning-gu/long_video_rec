@@ -1,0 +1,6 @@
+# M8 GPU 训练额外依赖（在 requirements.txt 基础上）
+# 注意：GPU 机器请先安装匹配 CUDA 的 torch（见 docs/M8-GPU训练指南.md）
+transformers>=4.45
+peft>=0.13
+accelerate
+sentencepiece

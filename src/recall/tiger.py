@@ -21,8 +21,8 @@ from src import config
 from src.data.features import positive_sequences
 
 MAX_HIST_ITEMS = 50
-L_LEVELS = 3
-K_CODES = 256
+L_LEVELS = config.P["rq_levels"]
+K_CODES = config.P["rq_k"]
 VOCAB = K_CODES + 1                 # 0 = pad
 MAX_TOKENS = MAX_HIST_ITEMS * L_LEVELS + L_LEVELS + 8
 DIM = 96

@@ -61,8 +61,7 @@ class Recommender:
             }
             for r in movies.itertuples()
         }
-        self.itemcf = ItemCFRecall(
-            np.load(config.ART_DIR / "itemcf_sim.npy"), movie_ids)
+        self.itemcf = ItemCFRecall.load()
         self.tt = TwoTowerRecall.load()
         self.sas = SASRecRecall.load()
         self.hot = HotRecall(hot_df)
@@ -74,6 +73,19 @@ class Recommender:
                       if (config.ART_DIR / "fine_v2.pt").exists() else None)
         self.rankers = ["v1"] + (["v2"] if self.fine2 else [])
         self.llm = LLMService()
+        # M8：本地 LoRA ranker（LLM_RANKER_BACKEND=local 且 adapter 存在；
+        # 加载失败静默回退 API，主链路零依赖不变）
+        self.llm_local = None
+        if config.LLM_RANKER_BACKEND == "local" and (
+                ROOT_ADAPTER := config.ROOT / "data" / "lora-adapter"
+        ).exists():
+            try:
+                from src.llm.local_ranker import LocalLLMRanker
+                self.llm_local = LocalLLMRanker(config.LORA_BASE_MODEL,
+                                                str(ROOT_ADAPTER))
+                print("[llm] 本地 LoRA ranker 已加载（rerank 走本地，理由走 API）")
+            except Exception as e:
+                print(f"[llm] 本地 ranker 加载失败，回退 API：{e}")
         # M7：TIGER 生成式召回 + RQ-VAE（新片冷启动编码）+ 蒸馏粗排 student
         self.tiger = (TigerRecall.load()
                       if (config.ART_DIR / "tiger.pt").exists()
@@ -632,8 +644,25 @@ def llm_enhance(req: LLMEnhanceReq):
     state = REC.store.get(req.user_id)
     profile = [REC.movie_info.get(m, {}).get("title", str(m))
                for m in reversed(state.recent_positives[-8:])]
-    order, reasons, degraded = REC.llm.enhance(
-        req.user_id, movies, profile)
+    # M8：rerank 走本地 LoRA（若已加载）——同一任务的"微调 vs 提示词"线上对照
+    order = None
+    degraded = True
+    if REC.llm_local is not None:
+        try:
+            hist_titles = [REC.movie_info.get(m, {}).get("title", str(m))
+                           for m in reversed(state.recent_positives[-10:])]
+            order = REC.llm_local.rerank(hist_titles, movies)
+            degraded = False
+        except Exception:
+            order = None
+    if order is None and REC.llm.available:
+        order, deg = REC.llm.enhance_order_only(req.user_id, movies, profile)
+        degraded = deg
+    reasons = {}
+    if REC.llm.available:
+        final_ids = order or [m["movie_id"] for m in movies]
+        reasons, _ = REC.llm.reasons_only(req.user_id, movies, profile,
+                                          final_ids[:12])
     return {"order": order, "reasons": reasons, "degraded": degraded}
 
 

@@ -4,8 +4,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
-RAW_DIR = DATA_DIR / "ml-1m"
-ART_DIR = DATA_DIR / "artifacts"
 WEB_DIR = ROOT / "web"
 
 
@@ -23,8 +21,54 @@ def _load_env() -> None:
 
 _load_env()
 
-ML1M_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
-ML1M_ZIP = DATA_DIR / "ml-1m.zip"
+# ---- 数据集注册表（M8：多数据集抽象，ml-1m 参数与历史完全一致）----
+# 通过环境变量 REC_DATASET 选择（scripts 的 --dataset 参数会设置它）。
+# "ml-25m-test" 为本地小样 fixture（代码路径验证用，正式训练用 ml-25m）。
+DATASET = os.environ.get("REC_DATASET", "ml-1m")
+
+DATASETS = {
+    "ml-1m": dict(
+        url="https://files.grouplens.org/datasets/movielens/ml-1m.zip",
+        raw_dir="ml-1m", fmt="dat",
+        tt_dim=64, sas_dim=64, sas_layers=2,
+        itemcf_topk=0,                 # 0 = 稠密精确相似矩阵
+        faiss="flat",                  # n_items 小用精确检索
+        rq_k=256, rq_levels=3,
+        tt_epochs=30, sas_epochs=80, lg_epochs=40,
+        fine_epochs=6, tiger_epochs=15, rq_epochs=400,
+    ),
+    "ml-25m": dict(
+        url="https://files.grouplens.org/datasets/movielens/ml-25m.zip",
+        raw_dir="ml-25m", fmt="csv",
+        tt_dim=128, sas_dim=128, sas_layers=3,
+        itemcf_topk=200,               # >0 = 分块 top-K 稀疏相似（59k² 稠密不可行）
+        faiss="hnsw",                  # 近似检索（59k+ 物品）
+        rq_k=512, rq_levels=3,
+        tt_epochs=25, sas_epochs=30, lg_epochs=60,
+        fine_epochs=4, tiger_epochs=10, rq_epochs=600,
+    ),
+    "ml-25m-test": dict(               # 本地 fixture：同 ml-25m 代码路径
+        url=None, raw_dir="ml-25m-test", fmt="csv",
+        tt_dim=128, sas_dim=128, sas_layers=3,
+        itemcf_topk=200, faiss="hnsw",
+        rq_k=512, rq_levels=3,
+        tt_epochs=2, sas_epochs=2, lg_epochs=2,
+        fine_epochs=2, tiger_epochs=2, rq_epochs=20,
+    ),
+}
+if DATASET not in DATASETS:
+    raise RuntimeError(f"未知数据集 {DATASET}；可选：{list(DATASETS)}")
+P = DATASETS[DATASET]                  # 当前数据集参数（P = params）
+
+RAW_DIR = DATA_DIR / P["raw_dir"]
+# 产物目录按数据集隔离：ml-1m 沿用历史路径（现有产物不迁移），
+# 其他数据集用 artifacts-<name>（避免 fixture/规模化训练覆盖 ml-1m 产物）
+if DATASET == "ml-1m":
+    ART_DIR = DATA_DIR / "artifacts"
+else:
+    ART_DIR = DATA_DIR / f"artifacts-{DATASET}"
+ML1M_URL = P["url"]                    # 兼容旧引用（pipeline 已改用 P["url"]）
+ML1M_ZIP = DATA_DIR / f"{P['raw_dir']}.zip"
 DB_PATH = ART_DIR / "demo.db"
 
 # ---- LLM 层（设计文档 §4.5，O2 预算无上限）----
@@ -33,6 +77,11 @@ LLM_BASE_URL = os.environ.get(
     "LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.7-plus")
 LLM_TIMEOUT = 25            # 单次调用超时（秒），超时降级（R2）
+# M8：LLM rerank 后端——"api"（零样本提示）| "local"（LoRA 微调，
+# scripts/train_lora.py 产出 data/lora-adapter/）。加载失败自动回退 api。
+LLM_RANKER_BACKEND = os.environ.get("LLM_RANKER_BACKEND", "api")
+LORA_BASE_MODEL = os.environ.get(
+    "LORA_BASE_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 
 # ---- TMDB / 海报 ----
 # 本网络 api.themoviedb.org 被阻断（DNS 污染 + SNI 阻断），海报改用

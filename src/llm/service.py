@@ -141,11 +141,26 @@ class LLMService:
         """
         if not self.available or not movies:
             return None, {}, True
-        order, degraded = self._rerank(user_id, movies, profile_titles)
+        order, degraded = self.enhance_order_only(user_id, movies,
+                                                  profile_titles)
         final_ids = order or [m["movie_id"] for m in movies]
-        reasons, deg2 = self._reasons(user_id, movies, profile_titles,
-                                      final_ids[:12])
+        reasons, deg2 = self.reasons_only(user_id, movies, profile_titles,
+                                          final_ids[:12])
         return order, reasons, (degraded or deg2)
+
+    def enhance_order_only(self, user_id: int, movies: list,
+                           profile_titles: list):
+        """仅重排（M8：本地 LoRA ranker 与 API 共用此入口的拆分形态）。"""
+        if not self.available or not movies:
+            return None, True
+        return self._rerank(user_id, movies, profile_titles)
+
+    def reasons_only(self, user_id: int, movies: list, profile_titles: list,
+                     final_ids: list):
+        """仅生成推荐理由。"""
+        if not self.available or not movies:
+            return {}, True
+        return self._reasons(user_id, movies, profile_titles, final_ids)
 
     # ---- 自然语言查询（§4.5，M5）----
 

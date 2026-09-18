@@ -1,12 +1,16 @@
-"""一键离线构建：数据管线 → ItemCF → 热门 → 双塔 → SASRec → DeepFM 精排。
+"""一键离线构建：数据管线 → ItemCF → 热门 → 双塔 → SASRec → LightGCN →
+内容画像依赖 → RQ-VAE 语义 ID → TIGER → DeepFM 精排 → 蒸馏粗排。
 
 用法：
-  python scripts/build.py          # 全量构建（首次约 30 分钟，2 核 CPU）
-  python scripts/build.py fine     # 仅重建精排（复用已有 M2 产物）
+  python scripts/build.py                      # 默认数据集（REC_DATASET，默认 ml-1m）
+  python scripts/build.py --dataset ml-25m     # ML-25M 规模化（GPU 机器）
+  python scripts/build.py fine                 # 仅重建精排（复用其他产物）
+  python scripts/build.py --dataset ml-25m-test  # 本地小样 fixture（验证代码路径）
 
 评测：
-  python scripts/eval.py           # 漏斗逐级 + beyond-accuracy 报告 → docs/评测报告.md
+  python scripts/eval.py           # 漏斗逐级 + beyond-accuracy 报告
 """
+import argparse
 import sys
 from pathlib import Path
 
@@ -15,9 +19,26 @@ sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):     # Windows 控制台默认 GBK，强制 UTF-8
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+def _parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("stage", nargs="?", default=None,
+                    help="可选：fine（仅重建精排）")
+    ap.add_argument("--dataset", default=None,
+                    help="数据集名（ml-1m / ml-25m / ml-25m-test），"
+                         "默认取环境变量 REC_DATASET 或 ml-1m")
+    return ap.parse_args()
+
+
+_ARGS = _parse_args()
+if _ARGS.dataset:
+    import os
+    os.environ["REC_DATASET"] = _ARGS.dataset
+
 import numpy as np
 import pandas as pd
 import torch
+from scipy import sparse
 
 from src import config
 from src.data.features import build_item_features, positive_sequences
@@ -28,22 +49,26 @@ from src.recall.itemcf import ItemCFRecall, build_sim
 from src.recall.sasrec import SASRecRecall, train_sasrec
 from src.recall.twotower import TwoTowerRecall, train_twotower
 
+print(f"数据集：{config.DATASET}（产物目录 {config.ART_DIR}）")
+
 
 def sanity_eval(recall_fns: dict, hot: HotRecall, ratings: pd.DataFrame,
                 train_pos: pd.DataFrame, test_pos: pd.DataFrame) -> None:
-    """HR@10 快速体检：各召回通道 vs 纯热门基线（漏斗逐级报告见 scripts/eval.py）。"""
+    """HR@10 快速体检：各召回通道 vs 纯热门基线（大规模数据集抽样 2000 用户）。"""
     rated = {int(u): set(map(int, g))
              for u, g in ratings.groupby("user_id")["movie_id"]}
     seqs = positive_sequences(train_pos)
     test_map = dict(zip(test_pos.user_id.astype(int), test_pos.movie_id.astype(int)))
     hot_top10 = {m for m, _ in hot.top(set(), 10)}
+    pool = [u for u in test_map if u in seqs]
+    if len(pool) > 2000:                     # 大规模时抽样（全量太慢）
+        pool = list(np.random.default_rng(42).choice(pool, 2000, replace=False))
 
     hits = {name: 0 for name in recall_fns}
     hits["hot"] = 0
     n = 0
-    for u, t in test_map.items():
-        if u not in seqs:
-            continue
+    for u in pool:
+        t = test_map[u]
         seen = rated.get(u, set()) - {t}
         for name, fn in recall_fns.items():
             hits[name] += t in {m for m, _ in fn(u, seqs[u], seen)}
@@ -52,7 +77,7 @@ def sanity_eval(recall_fns: dict, hot: HotRecall, ratings: pd.DataFrame,
     print("\n[sanity] HR@10（时间切分，每用户最后 1 个正反馈）")
     for name, h in hits.items():
         print(f"  {name:<10} {h / n:.4f}")
-    print(f"  (测试用户 n={n})")
+    print(f"  (评测用户 n={n})")
 
 
 def fine_auc(fine: FineRank, ratings, train_pos, test_pos, movie_ids,
@@ -85,7 +110,7 @@ def fine_auc(fine: FineRank, ratings, train_pos, test_pos, movie_ids,
 
 
 def main() -> None:
-    only = sys.argv[1] if len(sys.argv) > 1 else None    # 可选："fine"
+    only = _ARGS.stage
 
     if only != "fine":
         run_pipeline()
@@ -97,11 +122,16 @@ def main() -> None:
         n_users = int(pd.read_parquet(
             config.ART_DIR / "users.parquet").user_id.max())
 
-        # ---- M1：ItemCF + 热门 ----
-        print("building ItemCF similarity matrix ...")
+        # ---- M1：ItemCF（稠密 / 大规模稀疏 top-K）+ 热门 ----
+        print("building ItemCF similarity ...")
         sim, _pop = build_sim(train_pos, movie_ids)
-        np.save(config.ART_DIR / "itemcf_sim.npy", sim)
-        print(f"saved itemcf_sim.npy  shape={sim.shape}")
+        if config.P["itemcf_topk"] > 0:
+            sparse.save_npz(config.ART_DIR / "itemcf_sim_sparse.npz", sim)
+            print(f"saved itemcf_sim_sparse.npz  "
+                  f"shape={sim.shape} nnz={sim.nnz}")
+        else:
+            np.save(config.ART_DIR / "itemcf_sim.npy", sim)
+            print(f"saved itemcf_sim.npy  shape={sim.shape}")
 
         print("building hot lists ...")
         hot_df = build_hot(ratings, test_pos)
@@ -123,12 +153,12 @@ def main() -> None:
         np.save(config.ART_DIR / "tt_item_emb.npy", tt_item_embs)
         print(f"saved twotower.pt + tt_item_emb.npy  dim={tt_item_embs.shape}")
 
-        print("training SASRec-lite ...")
+        print("training SASRec ...")
         sas_model = train_sasrec(seqs)
         torch.save(sas_model.state_dict(), config.ART_DIR / "sasrec.pt")
         print("saved sasrec.pt")
 
-        # ---- M6：LightGCN 图召回（CPU 约 15 分钟）----
+        # ---- M6：LightGCN 图召回 ----
         print("training LightGCN ...")
         from src.recall.lightgcn import train_lightgcn
         lg_u, lg_i = train_lightgcn(train_pos, n_users, len(movies))
@@ -136,7 +166,8 @@ def main() -> None:
         np.save(config.ART_DIR / "lg_item_emb.npy", lg_i)
         print("saved lg_user_emb.npy + lg_item_emb.npy")
 
-        # ---- M6：内容画像 → 内容向量（依赖 scripts/enrich_profiles.py 先跑）----
+        # ---- M6：内容画像 → 内容向量（依赖 scripts/enrich_profiles.py 先跑；
+        #      大规模数据集可选：缺省时语义通道/精排v2 自动跳过）----
         if (config.ART_DIR / "profiles.parquet").exists():
             from src.data.content import build_content_vectors
             vec = build_content_vectors()
@@ -144,20 +175,18 @@ def main() -> None:
             print(f"saved content_emb.npy  shape={vec.shape}")
         else:
             print("profiles.parquet 不存在，跳过内容向量"
-                  "（先运行 python scripts/enrich_profiles.py）")
+                  "（如需：python scripts/enrich_profiles.py）")
 
         # ---- M7：RQ-VAE 语义 ID + TIGER-lite 生成式召回 ----
-        if (config.ART_DIR / "content_emb.npy").exists():
-            from src.data.semantic_id import main as run_rqvae
-            print("training RQ-VAE (semantic IDs) ...")
-            run_rqvae()
-            print("training TIGER-lite ...")
-            from src.recall.tiger import train_tiger
-            tiger_model = train_tiger(seqs)
-            torch.save(tiger_model.state_dict(), config.ART_DIR / "tiger.pt")
-            print("saved tiger.pt")
+        print("building RQ-VAE semantic IDs + TIGER-lite ...")
+        from src.data.semantic_id import main as run_rqvae
+        run_rqvae()
+        from src.recall.tiger import train_tiger
+        tiger_model = train_tiger(seqs)
+        torch.save(tiger_model.state_dict(), config.ART_DIR / "tiger.pt")
+        print("saved tiger.pt")
     else:
-        # 仅重建精排：加载 M1/M2 产物
+        # 仅重建精排：加载既有产物
         ratings = pd.read_parquet(config.ART_DIR / "ratings.parquet")
         movies = pd.read_parquet(config.ART_DIR / "movies.parquet")
         train_pos = pd.read_parquet(config.ART_DIR / "train_pos.parquet")
@@ -186,7 +215,7 @@ def main() -> None:
 
     if only != "fine":
         # ---- sanity 评测（走与线上相同的加载路径）----
-        itemcf = ItemCFRecall(sim, movie_ids)
+        itemcf = ItemCFRecall.load()
         tt = TwoTowerRecall.load()
         sas = SASRecRecall.load()
         fns = {
@@ -210,14 +239,13 @@ def main() -> None:
         sanity_eval(fns, HotRecall(hot_df), ratings, train_pos, test_pos)
 
         # ---- M7：蒸馏粗排（teacher=精排，以真实漏斗候选分布训练）----
-        if only != "distill":
-            print("training distilled coarse rank ...")
-            from src.rank.distill import train_distill
-            from src.serve.app import Recommender
-            rec = Recommender(state_db=":memory:")
-            student, _ = train_distill(rec)
-            torch.save(student.state_dict(), config.ART_DIR / "distill.pt")
-            print("saved distill.pt")
+        print("training distilled coarse rank ...")
+        from src.rank.distill import train_distill
+        from src.serve.app import Recommender
+        rec = Recommender(state_db=":memory:")
+        student, _ = train_distill(rec)
+        torch.save(student.state_dict(), config.ART_DIR / "distill.pt")
+        print("saved distill.pt")
     print("\nbuild done. 启动服务：python scripts/run.py → http://localhost:8000")
     print("评测报告：python scripts/eval.py → docs/评测报告.md")
 

@@ -20,10 +20,9 @@ from scipy.sparse import csr_matrix, diags, hstack, vstack
 from src import config
 from src.data.features import positive_sequences
 
-DIM = 64
+DIM = None                  # None = config.P["tt_dim"]（与双塔同维）
 N_LAYERS = 2
-EPOCHS = 40
-LR = 1e-3                  # 官方设置：全图耦合梯度下 1e-2 会失稳（实测卡 0.53）
+EPOCHS = None               # None = config.P["lg_epochs"]
 SAMPLES_PER_EPOCH = 100_000
 BATCH = 2048
 REFRESH_EVERY = 8          # 每 K 步刷新传播图（陈旧梯度，embedding 场景常规做法）
@@ -55,8 +54,9 @@ def _norm_adj_torch(train_pos: pd.DataFrame, n_users: int, n_items: int):
 
 
 class LightGCN(nn.Module):
-    def __init__(self, n_users, n_items, dim=DIM, n_layers=N_LAYERS):
+    def __init__(self, n_users, n_items, dim=None, n_layers=N_LAYERS):
         super().__init__()
+        dim = dim or config.P["tt_dim"]
         self.n_layers = n_layers
         self.user_table = nn.Embedding(n_users + 1, dim, padding_idx=0)
         self.item_table = nn.Embedding(n_items + 1, dim, padding_idx=0)
@@ -76,12 +76,15 @@ class LightGCN(nn.Module):
 
 
 def train_lightgcn(train_pos: pd.DataFrame, n_users: int, n_items: int,
-                   epochs=EPOCHS, seed=42):
-    """训练并返回 (user_embs[n_users+1, d], item_embs[n_items+1, d])，已 L2 归一。"""
+                   epochs=None, seed=42):
+    """训练并返回 (user_embs, item_embs)（未归一——物品范数承载流行度校准）。"""
+    epochs = epochs or config.P["lg_epochs"]
     torch.manual_seed(seed)
     adj = _norm_adj_torch(train_pos, n_users, n_items)
     model = LightGCN(n_users, n_items)
     opt = torch.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
+    # lr=1e-2 为当前部署产物（HR 0.045）的实际设置；诊断显示 1e-3 长训更稳，
+    # 两者在本机优化预算下差异不大，规模化重训时可调低
     pos_arr = train_pos[["user_id", "movie_id"]].to_numpy(copy=True)
     mid2idx = {int(m): i + 1 for i, m in enumerate(_movie_ids())}
     pos_arr[:, 1] = np.array([mid2idx[int(m)] + n_users + 1

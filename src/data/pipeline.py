@@ -14,27 +14,48 @@ from src import config
 
 def ensure_downloaded() -> None:
     config.DATA_DIR.mkdir(exist_ok=True)
-    if (config.RAW_DIR / "ratings.dat").exists():
+    marker = {"dat": "ratings.dat", "csv": "ratings.csv"}[config.P["fmt"]]
+    if (config.RAW_DIR / marker).exists():
         return
+    if not config.P["url"]:
+        raise RuntimeError(
+            f"数据集 {config.DATASET} 无下载地址（fixture 需手动生成），"
+            f"缺少 {config.RAW_DIR / marker}")
     if not config.ML1M_ZIP.exists():
-        print(f"downloading {config.ML1M_URL} ...")
-        urllib.request.urlretrieve(config.ML1M_URL, config.ML1M_ZIP)
+        print(f"downloading {config.P['url']} ...")
+        urllib.request.urlretrieve(config.P["url"], config.ML1M_ZIP)
     with zipfile.ZipFile(config.ML1M_ZIP) as z:
         z.extractall(config.DATA_DIR)
     print(f"extracted to {config.RAW_DIR}")
 
 
 def load_raw() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    sep = dict(sep="::", engine="python", encoding="latin-1")
-    ratings = pd.read_csv(
-        config.RAW_DIR / "ratings.dat",
-        names=["user_id", "movie_id", "rating", "timestamp"], **sep)
-    movies = pd.read_csv(
-        config.RAW_DIR / "movies.dat",
-        names=["movie_id", "title", "genres"], **sep)
-    users = pd.read_csv(
-        config.RAW_DIR / "users.dat",
-        names=["user_id", "gender", "age", "occupation", "zip"], **sep)
+    """返回 (ratings, movies, users)，列名统一为 snake_case。
+
+    - ml-1m（dat）：`::` 分隔的 ratings.dat / movies.dat / users.dat；
+    - ml-25m（csv）：ratings.csv / movies.csv，无 users.csv（从 ratings 派生）。
+    """
+    if config.P["fmt"] == "dat":
+        sep = dict(sep="::", engine="python", encoding="latin-1")
+        ratings = pd.read_csv(
+            config.RAW_DIR / "ratings.dat",
+            names=["user_id", "movie_id", "rating", "timestamp"], **sep)
+        movies = pd.read_csv(
+            config.RAW_DIR / "movies.dat",
+            names=["movie_id", "title", "genres"], **sep)
+        users = pd.read_csv(
+            config.RAW_DIR / "users.dat",
+            names=["user_id", "gender", "age", "occupation", "zip"], **sep)
+    else:
+        ratings = pd.read_csv(config.RAW_DIR / "ratings.csv")
+        ratings.columns = ["user_id", "movie_id", "rating", "timestamp"]
+        movies = pd.read_csv(config.RAW_DIR / "movies.csv")
+        movies.columns = ["movie_id", "title", "genres"]
+        users = pd.DataFrame(
+            {"user_id": sorted(ratings.user_id.unique())})
+    ratings["user_id"] = ratings.user_id.astype("int64")
+    ratings["movie_id"] = ratings.movie_id.astype("int64")
+    movies["movie_id"] = movies.movie_id.astype("int64")
     return ratings, movies, users
 
 

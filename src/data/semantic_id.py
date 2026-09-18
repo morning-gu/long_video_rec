@@ -14,10 +14,10 @@ import torch.nn as nn
 
 from src import config
 
-L_LEVELS = 3
-K_CODES = 256
+L_LEVELS = config.P["rq_levels"]
+K_CODES = config.P["rq_k"]
 DIM_HIDDEN = 128
-EPOCHS = 400
+EPOCHS = None                       # None = config.P["rq_epochs"]
 BETA = 0.25                 # commitment loss 权重
 
 
@@ -60,9 +60,10 @@ def _movie_ids() -> np.ndarray:
     return pd.read_parquet(config.ART_DIR / "movies.parquet").movie_id.values
 
 
-def train_rqvae(items_mat: np.ndarray, epochs=EPOCHS, seed=42):
+def train_rqvae(items_mat: np.ndarray, epochs=None, seed=42):
     """训练 RQ-VAE 并返回 (model, codes [n, L] numpy)。"""
     torch.manual_seed(seed)
+    epochs = epochs or config.P["rq_epochs"]
     n, dim_in = items_mat.shape
     model = RQVAE(dim_in)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -96,9 +97,14 @@ def encode_new(model: RQVAE, vec: np.ndarray) -> np.ndarray:
 
 def main() -> None:
     tt = np.load(config.ART_DIR / "tt_item_emb.npy")
-    content = np.load(config.ART_DIR / "content_emb.npy")
-    items_mat = np.hstack([tt, content])           # 两块均已 L2 归一
-    print(f"items_mat: {items_mat.shape}（双塔{tt.shape[1]} ⊕ 内容{content.shape[1]}）")
+    content_path = config.ART_DIR / "content_emb.npy"
+    if content_path.exists():
+        content = np.load(content_path)
+        items_mat = np.hstack([tt, content])       # 两块均已 L2 归一
+        print(f"items_mat: {items_mat.shape}（双塔{tt.shape[1]} ⊕ 内容{content.shape[1]}）")
+    else:
+        items_mat = tt                             # 无内容画像时退化为纯协同向量
+        print(f"items_mat: {items_mat.shape}（纯双塔；内容画像缺失）")
     model, codes = train_rqvae(items_mat)
     torch.save(model.state_dict(), config.ART_DIR / "rqvae.pt")
     np.save(config.ART_DIR / "sem_ids.npy", codes)

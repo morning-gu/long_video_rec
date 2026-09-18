@@ -20,6 +20,8 @@
 - [x] **M7** 生成式检索与蒸馏：RQ-VAE 语义 ID + TIGER-lite 生成式召回（约束解码防幻觉）
   + 蒸馏粗排（student 逼近精排分，目标一致性正解）+ 新片冷上架（零交互注册进生成词表）
   + LLM 口味画像卡
+- [~] **M8** 规模化与 LLM-native：代码已开发并本地验证（数据集抽象/稀疏ItemCF/HNSW/
+  LoRA 管线/用户模拟器），**GPU 训练待执行**——见 `docs/M8-GPU训练指南.md`
 - [ ] **M8** 规模化与 LLM-native：ML-25M 全量重训 + TALLRec/CoLLM 式 LoRA 微调 + LLM 用户模拟器评估（需 GPU）
 
 > M6–M8 详细规划（算法可行性/资源矩阵/验收标准/风险）见 `docs/路线图_M6-M8.md`。

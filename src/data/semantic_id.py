@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 
 from src import config
+from src.device import get_device
 
 L_LEVELS = config.P["rq_levels"]
 K_CODES = config.P["rq_k"]
@@ -65,9 +66,9 @@ def train_rqvae(items_mat: np.ndarray, epochs=None, seed=42):
     torch.manual_seed(seed)
     epochs = epochs or config.P["rq_epochs"]
     n, dim_in = items_mat.shape
-    model = RQVAE(dim_in)
+    model = RQVAE(dim_in).to(get_device())
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    x = torch.from_numpy(items_mat.astype(np.float32))
+    x = torch.from_numpy(items_mat.astype(np.float32)).to(get_device())
     rng = np.random.default_rng(seed)
     for epoch in range(epochs):
         perm = rng.permutation(n)
@@ -79,20 +80,23 @@ def train_rqvae(items_mat: np.ndarray, epochs=None, seed=42):
             loss.backward()
             opt.step()
             total += loss.item()
-        if (epoch + 1) % 100 == 0:
-            print(f"  [rqvae] epoch {epoch + 1}/{epochs}  loss={total:.4f}")
+        if (epoch + 1) % 100 == 0 or epoch == 0:
+            print(f"  [rqvae] epoch {epoch + 1}/{epochs}  loss={total:.4f}"
+                  + (f"  device={get_device()}" if epoch == 0 else ""))
     model.eval()
     with torch.no_grad():
         _, codes = model(x)
-    return model, codes.numpy().astype(np.int32)
+    return model, codes.cpu().numpy().astype(np.int32)
 
 
 def encode_new(model: RQVAE, vec: np.ndarray) -> np.ndarray:
     """对新片向量分配语义 ID（冷启动：encoder + 残差量化）。"""
+    device = next(model.parameters()).device
     with torch.no_grad():
-        z = model.encoder(torch.from_numpy(vec.astype(np.float32)).unsqueeze(0))
+        z = model.encoder(torch.from_numpy(vec.astype(np.float32))
+                          .to(device).unsqueeze(0))
         codes, _ = model.quantize(z)
-    return codes.numpy()[0].astype(np.int32)
+    return codes.cpu().numpy()[0].astype(np.int32)
 
 
 def main() -> None:

@@ -93,21 +93,23 @@ class Recommender:
         self.rqvae = None
         if (config.ART_DIR / "rqvae.pt").exists():
             from src.data.semantic_id import RQVAE
+            from src.device import get_device
             dim = self.tt.item_embs.shape[1] + (
                 np.load(config.ART_DIR / "content_emb.npy").shape[1]
                 if (config.ART_DIR / "content_emb.npy").exists() else 0)
             rq = RQVAE(dim)
             rq.load_state_dict(torch.load(
-                config.ART_DIR / "rqvae.pt", map_location="cpu",
+                config.ART_DIR / "rqvae.pt", map_location=str(get_device()),
                 weights_only=True))
-            self.rqvae = rq.eval()
+            self.rqvae = rq.eval().to(get_device())
         if (config.ART_DIR / "distill.pt").exists():
             from src.rank.distill import DistillStudent
+            from src.device import get_device
             st = DistillStudent()
             st.load_state_dict(torch.load(
-                config.ART_DIR / "distill.pt", map_location="cpu",
+                config.ART_DIR / "distill.pt", map_location=str(get_device()),
                 weights_only=True))
-            self.coarse.student = st.eval()
+            self.coarse.student = st.eval().to(get_device())
         self._new_item_seq = 9000            # 新片 ID 段（避开 ML-1M 1..3952）
         # M6 新增通道（产物存在才加载；旧通道不受影响，可运行时切换对比）
         self.lightgcn = (LightGCNRecall.load()

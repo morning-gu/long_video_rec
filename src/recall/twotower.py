@@ -19,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src import config
+from src.device import get_device
 
 HIST_K = 32            # 用户塔历史聚合窗口
 TEMP = 0.1             # sampled softmax 温度
@@ -117,10 +118,11 @@ def train_twotower(seqs: dict, genre_mh: np.ndarray, year_b: np.ndarray,
                    dim=None):
     """训练并返回 (model, item_embs[n_items, dim])。"""
     torch.manual_seed(seed)
+    device = get_device()
     dim = dim or config.P["tt_dim"]
     epochs = epochs or config.P["tt_epochs"]
     n_items, n_genres = genre_mh.shape
-    model = TwoTower(n_users, n_items, n_genres, dim=dim)
+    model = TwoTower(n_users, n_items, n_genres, dim=dim).to(device)
     genre_pad = torch.cat([torch.zeros(1, n_genres), torch.tensor(genre_mh)])
     year_pad = torch.cat([torch.zeros(1, dtype=torch.long),
                           torch.tensor(year_b.astype(np.int64))])
@@ -137,33 +139,37 @@ def train_twotower(seqs: dict, genre_mh: np.ndarray, year_b: np.ndarray,
         for s in range(0, len(g), batch):
             gc = g[s:s + batch]
             B = len(gc)
-            user_t = torch.from_numpy(usr_all[gc])
-            tgt_t = torch.from_numpy(tgt_all[gc])
-            hist_t = torch.from_numpy(hist_all[gc])
-            mask_t = torch.from_numpy(mask_all[gc])
-            gh_t = torch.from_numpy(gh_all[gc])
+            user_t = torch.from_numpy(usr_all[gc]).to(device)
+            tgt_t = torch.from_numpy(tgt_all[gc]).to(device)
+            hist_t = torch.from_numpy(hist_all[gc]).to(device)
+            mask_t = torch.from_numpy(mask_all[gc]).to(device)
+            gh_t = torch.from_numpy(gh_all[gc]).to(device)
             u = model.user_forward(user_t, hist_t, mask_t, gh_t)
             pos = model.item_forward(tgt_t, genre_pad[tgt_t], year_pad[tgt_t])
-            neg_idx = torch.randint(1, n_items + 1, (UNIFORM_NEG,))
+            neg_idx = torch.randint(1, n_items + 1, (UNIFORM_NEG,),
+                                    device=device)
             neg = model.item_forward(neg_idx, genre_pad[neg_idx],
                                      year_pad[neg_idx])
             logits = torch.cat([u @ pos.T, u @ neg.T], dim=1) / TEMP
-            loss = F.cross_entropy(logits, torch.arange(B))
+            loss = F.cross_entropy(logits, torch.arange(B, device=device))
             opt.zero_grad()
             loss.backward()
             opt.step()
             total += loss.item()
             n_batch += 1
-        print(f"  [twotower] epoch {epoch + 1}/{epochs}  loss={total / n_batch:.4f}")
+        print(f"  [twotower] epoch {epoch + 1}/{epochs}  loss={total / n_batch:.4f}"
+              + (f"  device={device}" if epoch == 0 else ""))
 
-    # 离线预计算全量 item embedding
+    # 离线预计算全量 item embedding（产物统一落 CPU）
     model.eval()
     embs = []
     with torch.no_grad():
         for s in range(0, n_items, 1024):
-            idx = torch.arange(s + 1, min(s + 1024, n_items) + 1)
-            embs.append(model.item_forward(idx, genre_pad[idx], year_pad[idx]))
-    return model, torch.cat(embs).numpy().astype(np.float32)
+            idx = torch.arange(s + 1, min(s + 1024, n_items) + 1,
+                               device=device)
+            embs.append(model.item_forward(idx, genre_pad[idx],
+                                           year_pad[idx]).cpu())
+    return model, torch.cat(embs).cpu().numpy().astype(np.float32)
 
 
 def _movie_ids() -> np.ndarray:
@@ -175,7 +181,8 @@ class TwoTowerRecall:
 
     def __init__(self, model, item_embs, movie_ids, genre_mh, n_users):
         import faiss
-        self.model = model.eval()
+        self.device = get_device()
+        self.model = model.eval().to(self.device)
         self.movie_ids = movie_ids
         self.item_embs = item_embs                  # 供粗排/MMR 复用
         self.mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
@@ -202,7 +209,7 @@ class TwoTowerRecall:
         model = TwoTower(n_users, len(movie_ids), genre_mh.shape[1],
                          dim=config.P["tt_dim"])
         model.load_state_dict(torch.load(
-            config.ART_DIR / "twotower.pt", map_location="cpu",
+            config.ART_DIR / "twotower.pt", map_location=str(get_device()),
             weights_only=True))
         item_embs = np.load(config.ART_DIR / "tt_item_emb.npy")
         return cls(model, item_embs, movie_ids, genre_mh, n_users)
@@ -224,10 +231,12 @@ class TwoTowerRecall:
         uid = user_id if 1 <= user_id <= self.n_users else 0   # 未知用户走 0 号
         with torch.no_grad():
             return self.model.user_forward(
-                torch.tensor([uid]), torch.tensor(hist),
-                torch.tensor(mask),
-                torch.tensor(self._genre_hist(hist_mids)).unsqueeze(0)
-            ).numpy()[0]
+                torch.tensor([uid], device=self.device),
+                torch.tensor(hist, device=self.device),
+                torch.tensor(mask, device=self.device),
+                torch.tensor(self._genre_hist(hist_mids),
+                             device=self.device).unsqueeze(0)
+            ).cpu().numpy()[0]
 
     def recall(self, user_id: int, hist_mids: list, exclude: set, topn: int):
         u = self.user_embed(user_id, hist_mids).reshape(1, -1)

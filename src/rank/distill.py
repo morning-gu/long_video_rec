@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 
 from src import config
+from src.device import get_device
 
 
 class DistillStudent(nn.Module):
@@ -66,21 +67,24 @@ def train_distill(rec, epochs=8, seed=42):
     torch.manual_seed(seed)
     x, y = generate_training_set(rec, seed=seed)
     print(f"  [distill] 训练集 {len(x)} 行（真实漏斗候选分布）")
-    student = DistillStudent()
+    device = get_device()
+    student = DistillStudent().to(device)
     opt = torch.optim.Adam(student.parameters(), lr=1e-3)
-    xt, yt = torch.from_numpy(x), torch.from_numpy(y)
+    xt, yt = (torch.from_numpy(x).to(device),
+              torch.from_numpy(y).to(device))
     n = len(x)
     rng = np.random.default_rng(seed)
     for epoch in range(epochs):
         perm = rng.permutation(n)
         tot = 0.0
         for s in range(0, n, 4096):
-            idx = perm[s:s + 4096]
+            idx = torch.from_numpy(perm[s:s + 4096]).to(device)
             loss = nn.functional.mse_loss(student(xt[idx]), yt[idx])
             opt.zero_grad()
             loss.backward()
             opt.step()
             tot += loss.item()
-        print(f"  [distill] epoch {epoch + 1}/{epochs}  mse={tot:.5f}")
+        print(f"  [distill] epoch {epoch + 1}/{epochs}  mse={tot:.5f}"
+              + (f"  device={device}" if epoch == 0 else ""))
     student.eval()
     return student, n

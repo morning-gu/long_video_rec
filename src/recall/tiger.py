@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from src import config
 from src.data.features import positive_sequences
+from src.device import get_device
 
 MAX_HIST_ITEMS = 50
 L_LEVELS = config.P["rq_levels"]
@@ -65,12 +66,14 @@ def _movie_ids() -> np.ndarray:
     return pd.read_parquet(config.ART_DIR / "movies.parquet").movie_id.values
 
 
-def train_tiger(seqs: dict, epochs=15, batch=64, lr=1e-3, seed=42):
+def train_tiger(seqs: dict, epochs=None, batch=64, lr=1e-3, seed=42):
     """训练语义 ID 序列 LM。seqs: {user: [mid...] 升序}。"""
     torch.manual_seed(seed)
+    device = get_device()
+    epochs = epochs or config.P["tiger_epochs"]
     sem_ids = np.load(config.ART_DIR / "sem_ids.npy")      # [n_items, L]
     mid2row = {int(m): i for i, m in enumerate(_movie_ids())}
-    model = Tiger()
+    model = Tiger().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, (s + 1) / 200))
@@ -98,12 +101,12 @@ def train_tiger(seqs: dict, epochs=15, batch=64, lr=1e-3, seed=42):
             for b, t in enumerate(toks):
                 inp[b, :len(t)] = t
                 msk[b, :len(t)] = True
-            inp_t = torch.tensor(inp)
-            logits = model(inp_t, torch.tensor(msk))
+            inp_t = torch.tensor(inp, device=device)
+            logits = model(inp_t, torch.tensor(msk, device=device))
             tgt = np.zeros_like(inp)
             tgt[:, :-1] = inp[:, 1:]                       # 下一 token
             loss = F.cross_entropy(logits.reshape(-1, VOCAB),
-                                   torch.tensor(tgt).reshape(-1),
+                                   torch.tensor(tgt, device=device).reshape(-1),
                                    ignore_index=0)
             opt.zero_grad()
             loss.backward()
@@ -112,7 +115,8 @@ def train_tiger(seqs: dict, epochs=15, batch=64, lr=1e-3, seed=42):
             step += 1
             total += loss.item()
             n_b += 1
-        print(f"  [tiger] epoch {epoch + 1}/{epochs}  loss={total / n_b:.4f}")
+        print(f"  [tiger] epoch {epoch + 1}/{epochs}  loss={total / n_b:.4f}"
+              + (f"  device={device}" if epoch == 0 else ""))
     model.eval()
     return model
 
@@ -121,7 +125,8 @@ class TigerRecall:
     """在线生成式召回：当前历史 → 约束 beam 生成码字元组 → 映射物品。"""
 
     def __init__(self, model, sem_ids, movie_ids):
-        self.model = model
+        self.device = get_device()
+        self.model = model.eval().to(self.device)
         self.sem_ids = sem_ids
         self.movie_ids = movie_ids
         self.mid2row = {int(m): i for i, m in enumerate(movie_ids)}
@@ -140,7 +145,7 @@ class TigerRecall:
     def load(cls):
         model = Tiger()
         model.load_state_dict(torch.load(
-            config.ART_DIR / "tiger.pt", map_location="cpu",
+            config.ART_DIR / "tiger.pt", map_location=str(get_device()),
             weights_only=True))
         return cls(model.eval(), np.load(config.ART_DIR / "sem_ids.npy"),
                    _movie_ids())
@@ -177,8 +182,10 @@ class TigerRecall:
                 for step in range(L_LEVELS):
                     inp = np.array([b[1] for b in beams], dtype=np.int64)
                     msk = np.ones_like(inp, dtype=bool)
-                    logits = self.model(torch.tensor(inp),
-                                        torch.tensor(msk))[:, -1, :].numpy()
+                    logits = self.model(
+                        torch.tensor(inp, device=self.device),
+                        torch.tensor(msk, device=self.device)
+                    )[:, -1, :].cpu().numpy()
                     cands = []
                     for bi, (lp, toks) in enumerate(beams):
                         # 约束解码：只允许合法前缀中出现的码字（catalog 约束）

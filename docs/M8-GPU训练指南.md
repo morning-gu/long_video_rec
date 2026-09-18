@@ -125,12 +125,17 @@ python scripts/sim_eval.py 150                            # LLM 用户模拟器�
 ## 7. 代码结构速查（M8 新增/改动）
 
 ```
+src/device.py            统一 torch device（REC_DEVICE 环境变量，auto/cpu/cuda）
 src/config.py            数据集注册表（ml-1m / ml-25m / ml-25m-test），产物目录隔离
 src/data/pipeline.py     双格式加载器（dat / csv）
 src/recall/itemcf.py     稠密 + 分块 top-K 稀疏双模式
-src/recall/twotower.py   dim 可配 + Faiss HNSW（>20k 物品自动切换）
-src/recall/sasrec.py     dim/layers 可配
-src/data/semantic_id.py  RQ-VAE k/levels 可配；无内容画像时纯双塔退化
+src/recall/twotower.py   dim 可配 + Faiss HNSW（>20k 物品自动切换）+ device 支持
+src/recall/sasrec.py     dim/layers 可配 + device 支持
+src/recall/tiger.py      码本参数可配 + device 支持
+src/recall/lightgcn.py   device 支持（稀疏邻接矩阵上 GPU）
+src/data/semantic_id.py  RQ-VAE k/levels 可配；无内容画像时纯双塔退化 + device 支持
+src/rank/fine.py         device 支持（训练循环 + 在线打分）
+src/rank/distill.py      device 支持
 scripts/build.py         --dataset 参数；sanity 大规模自动抽样
 scripts/run.py           --dataset / --port 参数
 scripts/train_lora.py    prepare / train / test / compare-api 四模式
@@ -138,3 +143,8 @@ scripts/sim_eval.py      LLM 用户模拟器（full vs popular vs random）
 src/llm/local_ranker.py  本地 LoRA ranker（LLM_RANKER_BACKEND=local）
 requirements-m8.txt      transformers / peft / accelerate
 ```
+
+**设备说明**：所有训练器与服务端前向统一走 `src/device.py` 的 `get_device()`——
+`REC_DEVICE` 环境变量控制（默认 auto：CUDA 可用即用）。GPU 机器上训练日志会
+打印 `device=cuda:0`；强制 CPU 用 `REC_DEVICE=cpu`。每个训练器首个 epoch
+的日志带 device 标记，方便确认没有静默回退到 CPU。

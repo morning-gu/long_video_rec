@@ -16,6 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src import config
+from src.device import get_device
 
 MAX_LEN = 50
 LOSS_POSITIONS = 12       # 每序列每 epoch 采样参与 loss 的位置数
@@ -64,19 +65,21 @@ def load_sas_model():
     model = SASRec(len(movie_ids), dim=config.P["sas_dim"],
                    n_layers=config.P["sas_layers"])
     model.load_state_dict(torch.load(
-        config.ART_DIR / "sasrec.pt", map_location="cpu", weights_only=True))
+        config.ART_DIR / "sasrec.pt", map_location=str(get_device()),
+        weights_only=True))
     return model.eval(), movie_ids
 
 
 def train_sasrec(seqs: dict, epochs=None, batch=128, lr=1e-3, seed=42):
     """训练并返回 model。seqs: {user: [mid...] 升序}，仅使用长度 ≥2 的序列。"""
     torch.manual_seed(seed)
+    device = get_device()
     epochs = epochs or config.P["sas_epochs"]
     movie_ids = _movie_ids()
     n_items = len(movie_ids)
     mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
     model = SASRec(n_items, dim=config.P["sas_dim"],
-                   n_layers=config.P["sas_layers"])
+                   n_layers=config.P["sas_layers"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, (s + 1) / WARMUP_STEPS))
@@ -99,14 +102,15 @@ def train_sasrec(seqs: dict, epochs=None, batch=128, lr=1e-3, seed=42):
                 inp[b, :l] = [mid2idx[m] for m in c[:-1]]
                 tgt[b, :l] = [mid2idx[m] for m in c[1:]]
                 mask[b, :l] = True
-            h = model(torch.tensor(inp), torch.tensor(mask))     # [B, L, dim]
-            tgt_t = torch.tensor(tgt)
+            h = model(torch.tensor(inp, device=device),
+                      torch.tensor(mask, device=device))     # [B, L, dim]
+            tgt_t = torch.tensor(tgt, device=device)
             # 每行随机采样 ≤LOSS_POSITIONS 个真实位置参与 loss
-            rand = torch.rand(B, L)
+            rand = torch.rand(B, L, device=device)
             rand[tgt_t == 0] = 2.0
             k = min(LOSS_POSITIONS, L)
             cols = rand.topk(k, dim=1, largest=False).indices     # [B, k]
-            rows = torch.arange(B).unsqueeze(1).expand(B, k)
+            rows = torch.arange(B, device=device).unsqueeze(1).expand(B, k)
             h_sel, t_sel = h[rows, cols], tgt_t[rows, cols]       # [B, k]
             keep = t_sel != 0
             logits = h_sel[keep] @ model.item_table.weight.T      # weight tying
@@ -121,7 +125,8 @@ def train_sasrec(seqs: dict, epochs=None, batch=128, lr=1e-3, seed=42):
             n_pos += int(keep.sum())
         if (epoch + 1) % 10 == 0 or epoch == 0:
             print(f"  [sasrec] epoch {epoch + 1}/{epochs}  "
-                  f"loss={total / n_b:.4f}  (每步平均 {n_pos // n_b} 个位置)")
+                  f"loss={total / n_b:.4f}  (每步平均 {n_pos // n_b} 个位置"
+                  + (f"，device={device}" if epoch == 0 else ")"))
     model.eval()
     return model
 
@@ -130,7 +135,8 @@ class SASRecRecall:
     """在线召回：当前序列在线编码（O1）→ 全库打分 Top-N。"""
 
     def __init__(self, model, movie_ids):
-        self.model = model.eval()
+        self.device = get_device()
+        self.model = model.eval().to(self.device)
         self.movie_ids = movie_ids
         self.mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
 
@@ -150,9 +156,10 @@ class SASRecRecall:
         inp[0, :L] = s
         mask[0, :L] = True
         with torch.no_grad():
-            h = self.model(torch.tensor(inp), torch.tensor(mask))
+            h = self.model(torch.tensor(inp, device=self.device),
+                           torch.tensor(mask, device=self.device))
             last = h[0, L - 1]                          # 最后一个真实位置
-            scores = (last @ self.model.item_table.weight.T).numpy()
+            scores = (last @ self.model.item_table.weight.T).cpu().numpy()
         scores[0] = -np.inf                             # padding 槽位
         banned = [self.mid2idx[m] for m in exclude if m in self.mid2idx]
         scores[banned] = -np.inf

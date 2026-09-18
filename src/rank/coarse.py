@@ -80,8 +80,9 @@ class CoarseRank:
         rows = np.array([self.mid2row[c["movie_id"]] for c in candidates])
         feats = np.stack([self.item_embs[rows] @ user_emb,
                           self.wr_pct[rows], self.pop_log[rows]], 1)
+        dev = next(self.student.parameters()).device
         with torch.no_grad():
             p = self.student(torch.from_numpy(
-                feats.astype(np.float32))).numpy()
+                feats.astype(np.float32)).to(dev)).cpu().numpy()
         order = np.argsort(-p)[:topn]
         return [{**candidates[i], "score": float(p[i])} for i in order]

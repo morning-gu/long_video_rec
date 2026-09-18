@@ -19,6 +19,7 @@ from scipy.sparse import csr_matrix, diags, hstack, vstack
 
 from src import config
 from src.data.features import positive_sequences
+from src.device import get_device
 
 DIM = None                  # None = config.P["tt_dim"]（与双塔同维）
 N_LAYERS = 2
@@ -80,8 +81,9 @@ def train_lightgcn(train_pos: pd.DataFrame, n_users: int, n_items: int,
     """训练并返回 (user_embs, item_embs)（未归一——物品范数承载流行度校准）。"""
     epochs = epochs or config.P["lg_epochs"]
     torch.manual_seed(seed)
-    adj = _norm_adj_torch(train_pos, n_users, n_items)
-    model = LightGCN(n_users, n_items)
+    device = get_device()
+    adj = _norm_adj_torch(train_pos, n_users, n_items).to(device)
+    model = LightGCN(n_users, n_items).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
     # lr=1e-2 为当前部署产物（HR 0.045）的实际设置；诊断显示 1e-3 长训更稳，
     # 两者在本机优化预算下差异不大，规模化重训时可调低
@@ -101,9 +103,10 @@ def train_lightgcn(train_pos: pd.DataFrame, n_users: int, n_items: int,
             if e is None or n_b % REFRESH_EVERY == 0:
                 e = model.propagate(adj)
             chunk = pairs[s:s + BATCH]
-            u = torch.from_numpy(chunk[:, 0].astype(np.int64))
-            pos = torch.from_numpy(chunk[:, 1].astype(np.int64))
-            neg = torch.randint(1, n_items + 1, (len(chunk),)) + n_users + 1
+            u = torch.from_numpy(chunk[:, 0].astype(np.int64)).to(device)
+            pos = torch.from_numpy(chunk[:, 1].astype(np.int64)).to(device)
+            neg = torch.randint(1, n_items + 1, (len(chunk),),
+                                device=device) + n_users + 1
             eu, ep, en = e[u], e[pos], e[neg]
             loss = -torch.nn.functional.logsigmoid(
                 (eu * ep).sum(1) - (eu * en).sum(1)).mean()
@@ -112,14 +115,15 @@ def train_lightgcn(train_pos: pd.DataFrame, n_users: int, n_items: int,
             opt.step()
             total += loss.item()
             n_b += 1
-        print(f"  [lightgcn] epoch {epoch + 1}/{epochs}  loss={total / n_b:.4f}")
+        print(f"  [lightgcn] epoch {epoch + 1}/{epochs}  loss={total / n_b:.4f}"
+              + (f"  device={device}" if epoch == 0 else ""))
     model.eval()
     with torch.no_grad():
         e = model.propagate(adj)
     # 不做 L2 归一：BPR 点积训练下物品范数承载流行度校准（实测归一化使
     # HR@10 从 0.042 掉到 0.008——排序被打乱）。与双塔（训练时显式归一）不同。
-    return (e[:n_users + 1].numpy().astype(np.float32),
-            e[n_users + 1:].numpy().astype(np.float32))
+    return (e[:n_users + 1].cpu().numpy().astype(np.float32),
+            e[n_users + 1:].cpu().numpy().astype(np.float32))
 
 
 class LightGCNRecall:

@@ -19,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src import config
+from src.device import get_device
 
 HIST_K = 32                 # 序列相似度/类型偏好窗口（与双塔一致）
 NEG_RATIO = 4               # 负采样比例
@@ -115,7 +116,7 @@ def _precompute_positions(train_pos: pd.DataFrame, genre_mh, tt_embs, mid2idx,
     K = HIST_K
     tp = train_pos.sort_values(["user_id", "timestamp"], kind="stable")
     usr_l, tgt_l, ts_l, hg_l, ht_l, hp_l, ss_l = [], [], [], [], [], [], []
-    sas_W = (sas_model.item_table.weight.detach().numpy()
+    sas_W = (sas_model.item_table.weight.detach().cpu().numpy()
              if sas_model is not None else None)
     offsets, counts = [], []
     cursor = 0
@@ -149,8 +150,10 @@ def _precompute_positions(train_pos: pd.DataFrame, genre_mh, tt_embs, mid2idx,
                 inp = np.zeros((1, m), dtype=np.int64)
                 mask = np.ones((1, m), dtype=bool)
                 inp[0] = win
-                h = sas_model(torch.tensor(inp),
-                              torch.tensor(mask))[0].numpy()      # [m, 64]
+                dev = next(sas_model.parameters()).device
+                h = sas_model(torch.tensor(inp, device=dev),
+                              torch.tensor(mask, device=dev)
+                              )[0].cpu().numpy()                # [m, 64]
             Hp = np.zeros((n, h.shape[1]), dtype=np.float32)
             ss = np.zeros(n, dtype=np.float32)
             for p in range(max(1, n - m + 1), n):
@@ -206,7 +209,7 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
                     content=content, mood=mood_m)
     from src.recall.sasrec import load_sas_model
     sas_model, _ = load_sas_model()
-    sas_W = sas_model.item_table.weight.detach().numpy()      # [V, 64]
+    sas_W = sas_model.item_table.weight.detach().cpu().numpy()   # [V, 64]
     (usr_all, tgt_all, ts_all, hg_all, ht_all, hp_all, ss_pos_all), \
         (offsets, counts) = _precompute_positions(
             train_pos, genre_mh, tt_embs, mid2idx, sas_model)
@@ -220,8 +223,9 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
     item_universe = np.arange(1, n_items + 1)
     pop_w = st.pos_count ** 0.75
     pop_p = pop_w / pop_w.sum()
+    device = get_device()
     model = DeepFM(n_users, n_items, n_genres,
-                   n_dense=8 if with_content else 6)
+                   n_dense=8 if with_content else 6).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     rng = np.random.default_rng(seed)
 
@@ -282,14 +286,17 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
             idx_mat, val_mat, dense = _assemble(
                 rg, rt, usr_all, ts_all, hg_all, ht_all, st, activity, ss,
                 extra)
-            logits = model(idx_mat, val_mat, dense)
-            loss = F.binary_cross_entropy_with_logits(logits, torch.tensor(rl))
+            logits = model(idx_mat.to(device), val_mat.to(device),
+                           dense.to(device))
+            loss = F.binary_cross_entropy_with_logits(
+                logits, torch.tensor(rl, device=device))
             opt.zero_grad()
             loss.backward()
             opt.step()
             total += loss.item()
             n_b += 1
-        print(f"  [fine] epoch {epoch + 1}/{epochs}  loss={total / n_b:.4f}")
+        print(f"  [fine] epoch {epoch + 1}/{epochs}  loss={total / n_b:.4f}"
+              + (f"  device={device}" if epoch == 0 else ""))
     model.eval()
     return model
 
@@ -330,7 +337,8 @@ class FineRank:
 
     def __init__(self, model, movie_ids, genre_mh, year_b, tt_embs, hot_df,
                  n_users, sas_model, content=None, mood=None):
-        self.model = model.eval()
+        self.device = get_device()
+        self.model = model.eval().to(self.device)
         self.movie_ids = movie_ids
         self.mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
         self.mid2row = {int(m): i for i, m in enumerate(movie_ids)}
@@ -362,7 +370,8 @@ class FineRank:
             mood, _ = mood_onehot()
         model = DeepFM(n_users, len(movie_ids), genre_mh.shape[1],
                        n_dense=n_dense)
-        model.load_state_dict(torch.load(path, map_location="cpu",
+        model.load_state_dict(torch.load(path,
+                                         map_location=str(get_device()),
                                          weights_only=True))
         from src.recall.sasrec import load_sas_model, MAX_LEN
         sas_model, _ = load_sas_model()
@@ -382,9 +391,11 @@ class FineRank:
         inp[0, :L] = s
         mask[0, :L] = True
         with torch.no_grad():
-            h = self.sas_model(torch.tensor(inp), torch.tensor(mask))
+            h = self.sas_model(torch.tensor(inp, device=self.device),
+                               torch.tensor(mask, device=self.device))
             last = h[0, L - 1]
-            return ((last @ self.sas_model.item_table.weight.T) / 10.0).numpy()
+            return ((last @ self.sas_model.item_table.weight.T)
+                    / 10.0).cpu().numpy()
 
     def _user_hist_stats(self, hist_mids):
         h = [self.mid2idx[m] for m in hist_mids[-HIST_K:] if m in self.mid2idx]
@@ -451,8 +462,9 @@ class FineRank:
                                                ).astype(np.float32)])
         with torch.no_grad():
             logits = self.model(
-                torch.from_numpy(idx_mat), torch.from_numpy(val_mat),
-                torch.from_numpy(dense)).numpy()
+                torch.from_numpy(idx_mat).to(self.device),
+                torch.from_numpy(val_mat).to(self.device),
+                torch.from_numpy(dense).to(self.device)).cpu().numpy()
         score = logits + gamma * sas_sig           # 分数级融合
         order = np.argsort(-score)[:topn]
         return [{**cands[i], "score": float(1.0 / (1.0 + np.exp(-score[i])))}

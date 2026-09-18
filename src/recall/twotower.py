@@ -123,9 +123,12 @@ def train_twotower(seqs: dict, genre_mh: np.ndarray, year_b: np.ndarray,
     epochs = epochs or config.P["tt_epochs"]
     n_items, n_genres = genre_mh.shape
     model = TwoTower(n_users, n_items, n_genres, dim=dim).to(device)
-    genre_pad = torch.cat([torch.zeros(1, n_genres), torch.tensor(genre_mh)])
+    # Pinned to `device` so GPU index tensors (tgt_t / neg_idx / idx) can
+    # gather from these tables without a cross-device indexing error.
+    genre_pad = torch.cat([torch.zeros(1, n_genres),
+                           torch.tensor(genre_mh)]).to(device)
     year_pad = torch.cat([torch.zeros(1, dtype=torch.long),
-                          torch.tensor(year_b.astype(np.int64))])
+                          torch.tensor(year_b.astype(np.int64))]).to(device)
     movie_ids = _movie_ids()
     mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
     (usr_all, tgt_all, hist_all, mask_all, gh_all), (offsets, counts) = \

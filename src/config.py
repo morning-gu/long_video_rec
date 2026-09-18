@@ -51,6 +51,7 @@ SASREC_QUOTA = 150          # 序列通道配额（M2）
 HOT_QUOTA = 50              # 热门通道配额
 LIGHTGCN_QUOTA = 150        # LightGCN 通道配额（M6）
 SEMANTIC_QUOTA = 150        # 内容语义通道配额（M6）
+TIGER_QUOTA = 40            # TIGER 生成式召回配额（M7，受 beam 宽度限制）
 COARSE_TOPN = 200           # 粗排输出（M3）
 FINE_TOPN = 50              # 精排输出（M3）
 ROW_K = 20                  # 主推荐行数量

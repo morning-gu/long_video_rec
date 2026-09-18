@@ -16,13 +16,13 @@ import numpy as np
 from src import config
 
 # keep 策略：每通道保留配额（合计 200 = COARSE_TOPN）
-COARSE_QUOTAS = {"itemcf": 45, "twotower": 30, "sasrec": 60, "hot": 12,
-                 "lightgcn": 27, "semantic": 26}
+COARSE_QUOTAS = {"itemcf": 42, "twotower": 27, "sasrec": 55, "hot": 11,
+                 "lightgcn": 22, "semantic": 21, "tiger": 22}
 
 
 class CoarseRank:
     def __init__(self, quotas=None, tt_item_embs=None, hot=None,
-                 movie_ids=None):
+                 movie_ids=None, student=None):
         self.quotas = quotas or COARSE_QUOTAS
         # tt 策略依赖：双塔 item 向量 + 口碑分位（wr 越高先验越大，
         # 未上榜冷门为 0，不加成不惩罚）
@@ -30,11 +30,18 @@ class CoarseRank:
         self.mid2row = ({int(m): i for i, m in enumerate(movie_ids)}
                         if movie_ids is not None else None)
         self.wr_pct = None
+        self.pop_log = None
         if hot is not None and self.mid2row is not None:
             self.wr_pct = np.zeros(len(tt_item_embs), dtype=np.float32)
+            self.pop_log = np.zeros(len(tt_item_embs), dtype=np.float32)
             n = max(len(hot.wr_order), 1)
             for rank, (mid, _wr) in enumerate(hot.wr_order):
                 self.wr_pct[self.mid2row[mid]] = 1.0 - rank / n
+            for mid, pc in hot.pos_count.items():
+                if mid in self.mid2row:
+                    self.pop_log[self.mid2row[mid]] = np.log1p(pc) / 8.0
+        # distill 策略依赖：蒸馏 student（src/rank/distill.py）
+        self.student = student
 
     def rank(self, candidates: list, strategy: str = "keep",
              user_emb: np.ndarray = None,
@@ -42,6 +49,9 @@ class CoarseRank:
         if strategy == "tt":
             return self._rank_tt(candidates, user_emb,
                                  topn or config.COARSE_TOPN, alpha)
+        if strategy == "distill":
+            return self._rank_distill(candidates, user_emb,
+                                      topn or config.COARSE_TOPN)
         return self._rank_keep(candidates)
 
     def _rank_keep(self, candidates: list) -> list:
@@ -62,3 +72,16 @@ class CoarseRank:
         scores = sims + alpha * self.wr_pct[rows]
         order = np.argsort(-scores)[:topn]
         return [{**candidates[i], "score": float(scores[i])} for i in order]
+
+    def _rank_distill(self, candidates: list, user_emb: np.ndarray,
+                      topn: int) -> list:
+        """蒸馏粗排（M7）：student(廉价特征) 逼近精排融合分后全局排序。"""
+        import torch
+        rows = np.array([self.mid2row[c["movie_id"]] for c in candidates])
+        feats = np.stack([self.item_embs[rows] @ user_emb,
+                          self.wr_pct[rows], self.pop_log[rows]], 1)
+        with torch.no_grad():
+            p = self.student(torch.from_numpy(
+                feats.astype(np.float32))).numpy()
+        order = np.argsort(-p)[:topn]
+        return [{**candidates[i], "score": float(p[i])} for i in order]

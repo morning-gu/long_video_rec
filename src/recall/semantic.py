@@ -27,6 +27,12 @@ class SemanticRecall:
     def load(cls):
         return cls(np.load(config.ART_DIR / "content_emb.npy"), _movie_ids())
 
+    def register(self, movie_id: int, vec: np.ndarray):
+        """注册新片（M7 冷启动）：内容向量进入语义召回空间。"""
+        self.vectors = np.vstack([self.vectors, vec[None, :]])
+        self.movie_ids = np.append(self.movie_ids, movie_id)
+        self.mid2row[int(movie_id)] = len(self.movie_ids) - 1
+
     def user_profile(self, hist_mids: list):
         rows = [self.mid2row[m] for m in hist_mids[-HIST_K:]
                 if m in self.mid2row]

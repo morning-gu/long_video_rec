@@ -31,6 +31,7 @@ from src.recall.lightgcn import LightGCNRecall
 from src.recall.merge import merge
 from src.recall.sasrec import SASRecRecall
 from src.recall.semantic import SemanticRecall
+from src.recall.tiger import TigerRecall
 from src.recall.twotower import TwoTowerRecall
 from src.rerank.dpp import dpp_order
 from src.rerank.mmr import mmr_order
@@ -73,6 +74,29 @@ class Recommender:
                       if (config.ART_DIR / "fine_v2.pt").exists() else None)
         self.rankers = ["v1"] + (["v2"] if self.fine2 else [])
         self.llm = LLMService()
+        # M7：TIGER 生成式召回 + RQ-VAE（新片冷启动编码）+ 蒸馏粗排 student
+        self.tiger = (TigerRecall.load()
+                      if (config.ART_DIR / "tiger.pt").exists()
+                      and (config.ART_DIR / "sem_ids.npy").exists() else None)
+        self.rqvae = None
+        if (config.ART_DIR / "rqvae.pt").exists():
+            from src.data.semantic_id import RQVAE
+            dim = self.tt.item_embs.shape[1] + (
+                np.load(config.ART_DIR / "content_emb.npy").shape[1]
+                if (config.ART_DIR / "content_emb.npy").exists() else 0)
+            rq = RQVAE(dim)
+            rq.load_state_dict(torch.load(
+                config.ART_DIR / "rqvae.pt", map_location="cpu",
+                weights_only=True))
+            self.rqvae = rq.eval()
+        if (config.ART_DIR / "distill.pt").exists():
+            from src.rank.distill import DistillStudent
+            st = DistillStudent()
+            st.load_state_dict(torch.load(
+                config.ART_DIR / "distill.pt", map_location="cpu",
+                weights_only=True))
+            self.coarse.student = st.eval()
+        self._new_item_seq = 9000            # 新片 ID 段（避开 ML-1M 1..3952）
         # M6 新增通道（产物存在才加载；旧通道不受影响，可运行时切换对比）
         self.lightgcn = (LightGCNRecall.load()
                          if (config.ART_DIR / "lg_user_emb.npy").exists() else None)
@@ -80,7 +104,8 @@ class Recommender:
                          if (config.ART_DIR / "content_emb.npy").exists() else None)
         self.channels_available = ["itemcf", "twotower", "sasrec", "hot"] + (
             ["lightgcn"] if self.lightgcn else []) + (
-            ["semantic"] if self.semantic else [])
+            ["semantic"] if self.semantic else []) + (
+            ["tiger"] if self.tiger else [])
         self.rerankers = list(config.RERANKERS)
         # 海报（IMDb 源，scripts/enrich_posters.py 产出；缺图前端回退渐变占位）
         self.posters = {}
@@ -135,6 +160,10 @@ class Recommender:
                 ch["semantic"] = self.semantic.recall(
                     state.recent_positives, exclude, config.SEMANTIC_QUOTA)
                 quotas["semantic"] = config.SEMANTIC_QUOTA
+            if self.tiger is not None and "tiger" in active:
+                ch["tiger"] = self.tiger.recall(
+                    state.recent_positives, exclude, config.TIGER_QUOTA)
+                quotas["tiger"] = config.TIGER_QUOTA
         if "hot" in active or not ch:             # 热门兜底（通道全关时）
             ch["hot"] = self.hot.top(exclude, config.HOT_QUOTA)
             quotas["hot"] = config.HOT_QUOTA
@@ -142,12 +171,12 @@ class Recommender:
         stages = {"channels": ch, "recall": merged}
 
         if mode == "full" and state.seeds:
-            # ③ 粗排（keep=通道保持压缩 | tt=双塔点积+口碑先验 | none=跳过）
+            # ③ 粗排（keep=通道压缩 | tt=双塔重排 | distill=蒸馏 | none=跳过）
             if coarse == "none":
                 stages["coarse"] = list(merged)
-            elif coarse == "tt":
+            elif coarse in ("tt", "distill"):
                 u_emb = self.tt.user_embed(user_id, state.recent_positives)
-                stages["coarse"] = self.coarse.rank(merged, "tt", u_emb)
+                stages["coarse"] = self.coarse.rank(merged, coarse, u_emb)
             else:
                 stages["coarse"] = self.coarse.rank(merged)
             # ④ 精排（v1=M3；v2=M6 +内容特征；none=跳过）
@@ -258,7 +287,7 @@ def meta():
     return {"channels": REC.channels_available,
             "rerankers": list(config.RERANKERS) + ["none"],
             "rankers": REC.rankers + ["none"],
-            "coarse": ["keep", "tt", "none"]}
+            "coarse": ["keep", "tt", "distill", "none"]}
 
 
 @app.get("/api/recommend")
@@ -276,8 +305,8 @@ def recommend(user_id: int, mode: str = "full", channels: str = "",
     if ranker not in (*REC.rankers, "none"):
         raise HTTPException(400, f"ranker must be one of "
                                  f"{(*REC.rankers, 'none')}")
-    if coarse not in ("keep", "tt", "none"):
-        raise HTTPException(400, "coarse must be keep|tt|none")
+    if coarse not in ("keep", "tt", "distill", "none"):
+        raise HTTPException(400, "coarse must be keep|tt|distill|none")
     ch_list = [c.strip() for c in channels.split(",") if c.strip()]
     unknown = [c for c in ch_list if c not in REC.channels_available]
     if unknown:
@@ -349,6 +378,109 @@ def movie_detail(movie_id: int, user_id: int = 0):
 
 class SynopsisReq(BaseModel):
     movie_id: int
+
+
+@app.get("/api/profile_card")
+def profile_card(user_id: int):
+    """用户口味画像卡（M7）：LLM 总结观影历史 → 标签 + 一句话。"""
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    if not REC.llm.available:
+        return {"tags": [], "summary": "", "degraded": True}
+    state = REC.store.get(user_id)
+    hist = []
+    for m in reversed(state.recent_positives[-10:]):
+        info = REC.movie_info.get(m)
+        if info:
+            hist.append((info["title"], "/".join(info["genres"][:3])))
+    if not hist:
+        return {"tags": [], "summary": "", "degraded": True}
+    card = REC.llm.profile_card(user_id, hist)
+    return {"tags": card["tags"] if card else [],
+            "summary": card["summary"] if card else "",
+            "degraded": card is None}
+
+
+class NewMovieReq(BaseModel):
+    user_id: int
+    title: str
+    text: str = ""
+
+
+@app.post("/api/new_movie")
+def new_movie(req: NewMovieReq):
+    """新片上架（M7 冷启动演示）：LLM 画像 → 内容向量 → RQ-VAE 语义 ID →
+    注册进 TIGER 生成词表 + 语义召回空间 → 零交互检查能否被当前用户召回。
+
+    语义 ID 的核心卖点：新片无需任何交互数据即可进入生成式召回词表
+    （传统 ID embedding 需要交互才能学到表示）。
+    """
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    title = req.title.strip()[:60]
+    if not title:
+        raise HTTPException(400, "title required")
+    if REC.rqvae is None or REC.tiger is None:
+        raise HTTPException(503, "TIGER/RQ-VAE 产物未构建")
+
+    # ① LLM 内容画像（虚构片名走推断模式；用户描述作为线索并入，
+    #    由 LLM 产出丰富 desc——thin 文本会导致语义向量质量差）
+    prof = (REC.llm.movie_profile(title, "", fictional=True, hint=req.text)
+            if REC.llm.available else None) or {}
+    genres = prof.get("genres", [])
+    mood, era = prof.get("mood", ""), prof.get("era", "")
+    desc = prof.get("desc", "") or req.text.strip()[:60]
+
+    # ② 内容向量（已拟合模型同空间投影）→ ③ RQ-VAE 语义 ID
+    from src.data.content import embed_new_movie
+    from src.data.semantic_id import encode_new
+    cvec = embed_new_movie(title, genres, mood, era, desc)
+    tt_block = REC.tt.item_embs.mean(0)          # 新片无协同向量，用均值先验
+    codes = encode_new(REC.rqvae, np.concatenate([tt_block, cvec]))
+
+    # 内容近邻（表示正确性的直接证据：近邻应全为同类型片）
+    neighbors = []
+    if REC.semantic is not None:
+        sims = REC.semantic.vectors @ cvec
+        for r in np.argsort(-sims)[:3]:
+            m = int(REC.semantic.movie_ids[r])
+            info = REC.movie_info.get(m, {})
+            neighbors.append({"title": info.get("title", str(m)),
+                              "sim": round(float(sims[r]), 3)})
+
+    # ④ 注册（TIGER 生成词表 + 语义召回空间 + 元数据）
+    REC._new_item_seq += 1
+    mid = REC._new_item_seq
+    REC.movie_info[mid] = {"title": title, "genres": genres}
+    REC.tiger.register(mid, codes)
+    if REC.semantic is not None:
+        REC.semantic.register(mid, cvec)
+
+    # ⑤ 零交互召回检查（阈值=通道召回配额；另附全库排名——语义通道判别力
+    #    有限（HR 0.034），命中与否都如实展示，近邻证明表示正确性）
+    state = REC.store.get(req.user_id)
+    exclude = state.seen | state.suppress
+    t_rec = REC.tiger.recall(state.recent_positives, exclude, 100)
+    t_rank = next((i for i, (m, _) in enumerate(t_rec) if m == mid), -1)
+    s_rank, s_full = -1, None
+    if REC.semantic is not None:
+        p = REC.semantic.user_profile(state.recent_positives)
+        if p is not None:
+            s_full = int((REC.semantic.vectors @ p > cvec @ p).sum()) + 1
+        s_rec = REC.semantic.recall(state.recent_positives, exclude,
+                                    config.SEMANTIC_QUOTA)
+        s_rank = next((i for i, (m, _) in enumerate(s_rec) if m == mid), -1)
+    return {
+        "movie_id": mid, "title": title, "genres": genres, "mood": mood,
+        "desc": desc, "codes": [int(c) for c in codes],
+        "neighbors": neighbors,
+        "tiger_rank": t_rank + 1 if t_rank >= 0 else None,
+        "semantic_rank": s_rank + 1 if s_rank >= 0 else None,
+        "semantic_full_rank": s_full,
+        "recalled": t_rank >= 0 or s_rank >= 0,
+        "tiger_top": [{"title": REC.movie_info[m]["title"], "score": round(s, 3)}
+                      for m, s in t_rec[:5]],
+    }
 
 
 @app.post("/api/synopsis")

@@ -191,6 +191,9 @@
   .badge.query    { background: rgba(129, 140, 248, .15); color: #a5b0ff; }
   .badge.lightgcn { background: rgba(163, 230, 53, .13); color: #b4ec6a; }
   .badge.semantic { background: rgba(34, 211, 238, .13); color: #5ad9ec; }
+  .badge.tiger    { background: rgba(251, 191, 36, .13); color: #facc4e; }
+
+  .ptag { border-color: rgba(139, 92, 246, .4) !important; color: #b9a3f2 !important; }
 
   /* 用户搜索下拉（M6+） */
   .userbox { position: relative; }
@@ -436,6 +439,7 @@
     </div>
     <button id="llmToggle" class="on" title="LLM 重排 + 推荐理由（失败自动降级）">✨ LLM 增强</button>
     <button id="cmpToggle" title="同屏对比：完整链路 vs 纯热门（O3 消融）">⚖️ 对比</button>
+    <button id="nmBtn" title="新片上架：LLM 画像 → 语义 ID → 零交互进入生成式召回（M7 冷启动演示）">🎬 新片上架</button>
     <button id="refresh">↻ 刷新</button>
     <a class="navlink" href="/eval" target="_blank" title="离线评测报告">📊 评测报告</a>
   </div>
@@ -446,6 +450,7 @@
     <div class="seg small" id="coarseSeg">
       <button data-co="keep" class="on" title="通道保持式压缩：每通道保留头部配额，只过滤不重排（M3 修订版，默认）">压缩</button>
       <button data-co="tt" title="双塔点积 + 口碑先验全局重排（M3 初版；评测显示其压制强通道头部，HR 0.186→0.119，保留用于对比演示）">双塔</button>
+      <button data-co="distill" title="蒸馏粗排（M7）：轻量 MLP 逼近精排融合分，以真实漏斗候选分布训练——目标一致性的工业解法">蒸馏</button>
       <button data-co="none" title="跳过粗排，融合候选直通精排">跳过</button>
     </div>
     <span class="lbl" style="margin-left:8px">精排</span>
@@ -454,9 +459,11 @@
     <div class="seg small" id="rrSeg"></div>
   </div>
   <div id="profile" class="profile"></div>
+  <div id="pcard" class="profile" style="display:none;margin-top:8px"></div>
 </header>
 <main id="rows"></main>
 <div class="dmodal" id="detailModal"></div>
+<div class="dmodal" id="nmModal"></div>
 <div id="toast"></div>
 
 <script>
@@ -471,7 +478,7 @@ function esc(s) {
 }
 const SRC_NAME = {itemcf:'ItemCF', twotower:'双塔', sasrec:'序列',
                   hot:'热门', cold:'冷门', query:'查询',
-                  lightgcn:'LightGCN', semantic:'语义'};
+                  lightgcn:'LightGCN', semantic:'语义', tiger:'TIGER'};
 const srcName = s => SRC_NAME[s] || s;
 
 const RANKER_LABEL = {v1: 'v1·DeepFM', v2: 'v2·+内容', none: '无'};
@@ -608,11 +615,85 @@ function querySection() {
 async function refresh() {
   if (curUser == null) return;
   showSkeleton();
+  loadProfileCard();
   try {
     if (compareOn) await refreshCompare();
     else await refreshNormal();
   } catch (e) {
     $('rows').innerHTML = '<section><h2>加载失败，请刷新重试</h2></section>';
+  }
+}
+
+async function loadProfileCard() {
+  const el = $('pcard');
+  if (!el) return;
+  try {
+    const r = await (await fetch(`/api/profile_card?user_id=${curUser}`)).json();
+    if (r.tags && r.tags.length) {
+      el.style.display = 'flex';
+      el.innerHTML = '<span>🎨 口味画像</span>' +
+        r.tags.map(t => `<span class="chip ptag">${esc(t)}</span>`).join('') +
+        (r.summary ? `<span style="color:var(--text-dim)">${esc(r.summary)}</span>` : '');
+    } else {
+      el.style.display = 'none';
+    }
+  } catch (e) {
+    el.style.display = 'none';
+  }
+}
+
+// ---- 新片上架（M7 语义 ID 冷启动）----
+
+function openNewMovie() {
+  $('nmModal').innerHTML = `
+    <div class="dbackdrop" onclick="closeNm()"></div>
+    <div class="dpanel" style="width:min(540px,94vw)">
+      <button class="dclose" onclick="closeNm()" title="关闭 (Esc)">✕</button>
+      <h3 style="font-size:17px;margin-bottom:6px">🎬 新片上架（语义 ID 冷启动）</h3>
+      <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;line-height:1.6">
+        LLM 生成内容画像 → RQ-VAE 编码语义 ID → 立即进入 TIGER 生成式召回词表——
+        <b style="color:var(--text-dim)">零交互数据</b>（传统 ID embedding 做不到）。
+        起一个贴近当前用户口味的片名，演示效果更佳。
+      </div>
+      <input id="nmTitle" placeholder="片名，如：星际警探" maxlength="60"
+             style="width:100%;margin-bottom:10px">
+      <input id="nmDesc" placeholder="一句话描述（可选），如：轻松的太空喜剧侦探片" maxlength="60"
+             style="width:100%">
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="act like" onclick="submitNewMovie()">🚀 上架</button>
+        <button class="act watched" onclick="closeNm()">取消</button>
+      </div>
+    </div>`;
+  $('nmModal').classList.add('open');
+  document.body.classList.add('lock');
+  $('nmTitle').focus();
+}
+
+function closeNm() {
+  $('nmModal').classList.remove('open');
+  document.body.classList.remove('lock');
+}
+
+async function submitNewMovie() {
+  const title = $('nmTitle').value.trim();
+  const desc = $('nmDesc').value.trim();
+  if (!title) { toast('请输入片名'); return; }
+  try {
+    const r = await (await fetch('/api/new_movie', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: curUser, title, text: desc})
+    })).json();
+    closeNm();
+    const nb = (r.neighbors || []).slice(0, 2).map(n => n.title).join(' / ');
+    const tr = r.tiger_rank ? `TIGER 生成第 ${r.tiger_rank} 位` : 'TIGER 未生成';
+    const sr = r.semantic_rank
+      ? `语义召回第 ${r.semantic_rank} 位（已进入候选）`
+      : `语义全库第 ${r.semantic_full_rank} 位`;
+    toast(`《${esc(title)}》上架成功：语义 ID ${r.codes.join('.')}，`
+        + `内容近邻 ${nb}；${tr}，${sr}`, 6000);
+    refresh();
+  } catch (e) {
+    toast('上架失败，请重试');
   }
 }
 
@@ -887,12 +968,12 @@ async function postEvent(movieId, action, value = null) {
 }
 
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, ms = 2200) {
   const t = $('toast');
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
 document.addEventListener('click', async e => {
@@ -913,7 +994,7 @@ document.addEventListener('click', async e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closeNm(); }
 });
 
 function setMode(m) {
@@ -977,6 +1058,7 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#userBox')) toggleUserMenu(false);
 });
 $('queryBtn').onclick = doQuery;
+$('nmBtn').onclick = openNewMovie;
 $('queryInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') doQuery();
 });

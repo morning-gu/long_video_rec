@@ -276,6 +276,84 @@ class LLMService:
         cached = self._cached(self._key("reason1", user_id, [movie_id]))
         return cached.get("reason") if cached else None
 
+    def profile_card(self, user_id: int, history: list):
+        """用户口味画像卡（M7）：观影历史 → 标签 + 一句话总结。
+
+        history: [(title, genres_str)] 最近若干部（新→旧）；缓存键含最后一部，
+        历史变化即失效。失败返回 None（前端隐藏）。
+        """
+        if not self.available or not history:
+            return None
+        key = self._key("pcard", user_id, [history[0][0], len(history)])
+        cached = self._cached(key)
+        if cached is not None:
+            return cached if cached.get("tags") else None
+        lines = [f"- 《{t}》（{g}）" for t, g in history[:10]]
+        prompt = (
+            "根据用户最近的观影记录，总结其口味画像。\n\n"
+            "【最近看过】（新→旧）\n" + "\n".join(lines) + "\n\n"
+            '只输出 JSON：{"tags": ["2~4 个中文标签，每个不超过 6 字"],'
+            ' "summary": "一句话总结其观影口味（不超过 40 字）"}')
+        try:
+            obj = _extract_json(self._chat(prompt))
+            tags = [str(t)[:8] for t in (obj.get("tags") or [])][:4]
+            summary = str(obj.get("summary", ""))[:60]
+            if not tags:
+                return None
+            out = {"tags": tags, "summary": summary}
+            self._put(key, out)
+            return out
+        except Exception as e:
+            self._log_fail("pcard", f"{type(e).__name__}: {e}")
+            return None
+
+    def movie_profile(self, title: str, genres: str, fictional: bool = False,
+                      hint: str = ""):
+        """新片内容画像（M7 冷启动）。
+
+        fictional=True 为推断模式：虚构新片按片名/线索**推断**画像
+        （真实电影模式则"不认识则拒绝"，避免编造）。
+        hint：用户补充的一句话线索（并入推断提示，产出更丰富的画像）。
+        返回 {"genres": [...], "mood", "era", "desc"} 或 None。
+        """
+        key = self._key("mprof", 1 if fictional else 0, [title, hint])
+        cached = self._cached(key)
+        if cached is not None:
+            return cached if cached.get("genres") or cached.get("desc") else None
+        g = genres.replace("|", "/") if isinstance(genres, str) else ""
+        if fictional:
+            head = (f"《{title}》是一部虚构的新电影（类型线索：{g}"
+                    + (f"；补充线索：{hint}" if hint else "")
+                    + "）。根据片名与线索推断其内容画像 JSON"
+                      "（desc 务必具体丰富，包含题材、基调与看点）：\n")
+            tail = ""
+        else:
+            head = f"根据电影《{title}》（类型：{g}）输出内容画像 JSON：\n"
+            tail = ('如果你不认识这部电影，输出 {"unknown": true}，'
+                    '不要编造。\n')
+        prompt = (
+            head
+            + '{"genres": [从这18个类型选0~3个: ' + ", ".join(KNOWN_GENRES) + '],\n'
+            '  "mood": 从[轻松,幽默,温馨,治愈,浪漫,热血,史诗,紧张,悬疑,惊悚,黑暗,沉重,科幻感,怀旧,现实,荒诞]中选1个,\n'
+            '  "era": 年代感如"90年代"或"",\n'
+            '  "desc": 一句话中文描述电影气质与题材(不超过40字)}\n'
+            + tail + "只输出 JSON。")
+        try:
+            obj = _extract_json(self._chat(prompt))
+            if obj is None or obj.get("unknown"):
+                self._put(key, {})
+                return None
+            out = {"genres": [x for x in (obj.get("genres") or [])
+                              if x in KNOWN_GENRES],
+                   "mood": str(obj.get("mood", ""))[:6],
+                   "era": str(obj.get("era", ""))[:8],
+                   "desc": str(obj.get("desc", ""))[:60]}
+            self._put(key, out)
+            return out
+        except Exception as e:
+            self._log_fail("mprof", f"{type(e).__name__}: {e}")
+            return None
+
     def synopsis(self, movie_id: int, title: str, genres: list):
         """AI 简介（按电影缓存，与用户无关）；不确定的影片返回 None。
 

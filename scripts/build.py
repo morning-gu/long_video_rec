@@ -145,6 +145,17 @@ def main() -> None:
         else:
             print("profiles.parquet 不存在，跳过内容向量"
                   "（先运行 python scripts/enrich_profiles.py）")
+
+        # ---- M7：RQ-VAE 语义 ID + TIGER-lite 生成式召回 ----
+        if (config.ART_DIR / "content_emb.npy").exists():
+            from src.data.semantic_id import main as run_rqvae
+            print("training RQ-VAE (semantic IDs) ...")
+            run_rqvae()
+            print("training TIGER-lite ...")
+            from src.recall.tiger import train_tiger
+            tiger_model = train_tiger(seqs)
+            torch.save(tiger_model.state_dict(), config.ART_DIR / "tiger.pt")
+            print("saved tiger.pt")
     else:
         # 仅重建精排：加载 M1/M2 产物
         ratings = pd.read_parquet(config.ART_DIR / "ratings.parquet")
@@ -192,7 +203,21 @@ def main() -> None:
             from src.recall.semantic import SemanticRecall
             sem = SemanticRecall.load()
             fns["semantic"] = lambda u, seq, seen: sem.recall(seq, seen, 10)
+        if (config.ART_DIR / "tiger.pt").exists():
+            from src.recall.tiger import TigerRecall
+            tg = TigerRecall.load()
+            fns["tiger"] = lambda u, seq, seen: tg.recall(seq, seen, 10)
         sanity_eval(fns, HotRecall(hot_df), ratings, train_pos, test_pos)
+
+        # ---- M7：蒸馏粗排（teacher=精排，以真实漏斗候选分布训练）----
+        if only != "distill":
+            print("training distilled coarse rank ...")
+            from src.rank.distill import train_distill
+            from src.serve.app import Recommender
+            rec = Recommender(state_db=":memory:")
+            student, _ = train_distill(rec)
+            torch.save(student.state_dict(), config.ART_DIR / "distill.pt")
+            print("saved distill.pt")
     print("\nbuild done. 启动服务：python scripts/run.py → http://localhost:8000")
     print("评测报告：python scripts/eval.py → docs/评测报告.md")
 

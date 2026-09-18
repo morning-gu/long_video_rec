@@ -36,23 +36,27 @@ def _hour_weekend(ts: np.ndarray):
 
 
 class DeepFM(nn.Module):
-    """23 个稀疏字段（5 基础 + 18 类型槽位）+ 6 个稠密特征。"""
+    """23 个稀疏字段（5 基础 + 18 类型槽位）+ 稠密特征。
+
+    n_dense：v1=6（M3）；v2=8（M6，+内容相似度/基调匹配，见 train_fine）。
+    """
 
     N_FIELDS = 5 + 18
     N_DENSE = 6
 
     def __init__(self, n_users, n_items, n_genres, emb_dim=16,
-                 hidden=(128, 64)):
+                 hidden=(128, 64), n_dense=N_DENSE):
         super().__init__()
+        self.n_dense = n_dense
         # 字段：user / movie / year / hour / weekend / genre×18（均 0=padding）
         dims = [n_users + 1, n_items + 1, 11, 6, 3] + [n_genres + 1] * n_genres
         self.emb = nn.ModuleList([
             nn.Embedding(d, emb_dim, padding_idx=0) for d in dims])
         self.lin = nn.ModuleList([
             nn.Embedding(d, 1, padding_idx=0) for d in dims])
-        self.lin_dense = nn.Linear(self.N_DENSE, 1)
+        self.lin_dense = nn.Linear(n_dense, 1)
         self.mlp = nn.Sequential(
-            nn.Linear(self.N_FIELDS * emb_dim + self.N_DENSE, hidden[0]),
+            nn.Linear(self.N_FIELDS * emb_dim + n_dense, hidden[0]),
             nn.ReLU(), nn.Dropout(0.1),
             nn.Linear(hidden[0], hidden[1]), nn.ReLU(),
             nn.Linear(hidden[1], 1))
@@ -72,10 +76,13 @@ class DeepFM(nn.Module):
 class _ItemStats:
     """物品侧静态特征（行对齐 movies parquet）。"""
 
-    def __init__(self, genre_mh, year_b, tt_embs, hot_df):
+    def __init__(self, genre_mh, year_b, tt_embs, hot_df,
+                 content=None, mood=None):
         self.genre_mh = genre_mh
         self.year = year_b.astype(np.int64)
         self.tt = tt_embs
+        self.content = content      # [n_items, D] 内容向量（M6，可 None）
+        self.mood = mood            # [n_items, n_moods] one-hot（M6，可 None）
         n_items, n_genres = genre_mh.shape
         ar = np.arange(1, n_genres + 1)
         self.genre_idx = (genre_mh * ar).astype(np.int64)      # 槽位激活时=类型id
@@ -163,8 +170,15 @@ def _precompute_positions(train_pos: pd.DataFrame, genre_mh, tt_embs, mid2idx,
 
 
 def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
-               n_users, epochs=6, batch=1024, lr=1e-3, seed=42):
-    """训练 DeepFM-lite，返回 model。
+               n_users, epochs=6, batch=1024, lr=1e-3, seed=42,
+               with_content=False):
+    """训练 DeepFM，返回 model。
+
+    with_content=False → v1（6 稠密特征，fine.pt，M3）；
+    with_content=True  → v2（+内容相似度/基调匹配 2 特征，fine_v2.pt，M6）。
+    内容特征（M6）：用户全量正反馈的内容向量和 S_u / 基调计数 M_u——
+    正样本行按"排除目标自身"计算（训练历史含目标，防泄漏）；负/服务行
+    无排除（候选未看过），训练-服务口径一致。
 
     负采样为流行度加权（unigram^0.75）：均匀负采样下"流行"本身即完美正样本
     特征，模型学会流行度捷径（AUC 虚高但真实候选集上失效）；流行度负采样
@@ -174,7 +188,22 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
     movie_ids = _movie_ids()
     n_items, n_genres = genre_mh.shape
     mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
-    st = _ItemStats(genre_mh, year_b, tt_embs, hot_df)
+    content = mood_m = None
+    S_u = M_u = n_u = None
+    if with_content:
+        content = np.load(config.ART_DIR / "content_emb.npy")
+        from src.data.content import mood_onehot
+        mood_m, _ = mood_onehot()
+        S_u = np.zeros((n_users + 1, content.shape[1]), dtype=np.float32)
+        M_u = np.zeros((n_users + 1, mood_m.shape[1]), dtype=np.float32)
+        n_u = np.zeros(n_users + 1, dtype=np.float32)
+        for u, m in zip(train_pos.user_id.values, train_pos.movie_id.values):
+            r = mid2idx[int(m)] - 1
+            S_u[int(u)] += content[r]
+            M_u[int(u)] += mood_m[r]
+            n_u[int(u)] += 1
+    st = _ItemStats(genre_mh, year_b, tt_embs, hot_df,
+                    content=content, mood=mood_m)
     from src.recall.sasrec import load_sas_model
     sas_model, _ = load_sas_model()
     sas_W = sas_model.item_table.weight.detach().numpy()      # [V, 64]
@@ -191,7 +220,8 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
     item_universe = np.arange(1, n_items + 1)
     pop_w = st.pos_count ** 0.75
     pop_p = pop_w / pop_w.sum()
-    model = DeepFM(n_users, n_items, n_genres)
+    model = DeepFM(n_users, n_items, n_genres,
+                   n_dense=8 if with_content else 6)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     rng = np.random.default_rng(seed)
 
@@ -229,8 +259,29 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
             # （原始 logit / 10，与 _precompute_positions 口径一致）
             ss_neg = (hp_all[g_neg] * sas_W[t_neg]).sum(1) / 10.0
             ss = np.concatenate([ss_pos_all[g_pos], ss_neg]).astype(np.float32)
+            extra = None
+            if with_content:
+                # 正样本行：排除目标自身（其内容向量在 S_u 中，防泄漏）
+                up, tp = usr_all[g_pos], t_pos - 1
+                S_p, v_p = S_u[up], content[tp]
+                dot_p = (S_p * v_p).sum(1)
+                norm_p = np.linalg.norm(S_p - v_p, axis=1)
+                csim_p = np.where(n_u[up] > 1,
+                                  (dot_p - 1) / np.maximum(norm_p, 1e-9), 0.0)
+                mm_p = np.where(n_u[up] > 1,
+                                ((M_u[up] * mood_m[tp]).sum(1) - 1)
+                                / np.maximum(n_u[up] - 1, 1), 0.0)
+                # 负样本行：目标不在历史，无排除（与服务口径一致）
+                un, tn = usr_all[g_neg], t_neg - 1
+                csim_n = ((S_u[un] * content[tn]).sum(1)
+                          / np.maximum(np.linalg.norm(S_u[un], axis=1), 1e-9))
+                mm_n = (M_u[un] * mood_m[tn]).sum(1) / np.maximum(n_u[un], 1)
+                extra = np.stack([np.concatenate([csim_p, csim_n]),
+                                  np.concatenate([mm_p, mm_n])],
+                                 1).astype(np.float32)
             idx_mat, val_mat, dense = _assemble(
-                rg, rt, usr_all, ts_all, hg_all, ht_all, st, activity, ss)
+                rg, rt, usr_all, ts_all, hg_all, ht_all, st, activity, ss,
+                extra)
             logits = model(idx_mat, val_mat, dense)
             loss = F.binary_cross_entropy_with_logits(logits, torch.tensor(rl))
             opt.zero_grad()
@@ -243,7 +294,8 @@ def train_fine(train_pos, ratings, genre_mh, year_b, tt_embs, hot_df,
     return model
 
 
-def _assemble(g, tgt, usr_all, ts_all, hg_all, ht_all, st, activity, ss):
+def _assemble(g, tgt, usr_all, ts_all, hg_all, ht_all, st, activity, ss,
+              extra=None):
     """给定（位置 id × 目标物品）行集合，组装模型输入。正负样本共用。"""
     usr = usr_all[g]
     hb, wk = _hour_weekend(ts_all[g])
@@ -263,6 +315,8 @@ def _assemble(g, tgt, usr_all, ts_all, hg_all, ht_all, st, activity, ss):
     dense = np.stack([activity[usr], gm.astype(np.float32),
                       tsim.astype(np.float32), st.pop_log[tgt - 1],
                       st.wr[tgt - 1] / 5.0, ss], 1)
+    if extra is not None:                    # M6 v2：内容相似度 + 基调匹配
+        dense = np.hstack([dense, extra])
     return (torch.from_numpy(idx_mat), torch.from_numpy(val_mat),
             torch.from_numpy(dense))
 
@@ -275,16 +329,20 @@ class FineRank:
     """
 
     def __init__(self, model, movie_ids, genre_mh, year_b, tt_embs, hot_df,
-                 n_users, sas_model):
+                 n_users, sas_model, content=None, mood=None):
         self.model = model.eval()
         self.movie_ids = movie_ids
         self.mid2idx = {int(m): i + 1 for i, m in enumerate(movie_ids)}
-        self.st = _ItemStats(genre_mh, year_b, tt_embs, hot_df)
+        self.mid2row = {int(m): i for i, m in enumerate(movie_ids)}
+        self.st = _ItemStats(genre_mh, year_b, tt_embs, hot_df,
+                             content=content, mood=mood)
         self.sas_model = sas_model
         self.n_users = n_users
+        self.with_content = content is not None and model.n_dense == 8
 
     @classmethod
-    def load(cls):
+    def load(cls, variant="v1"):
+        """variant: 'v1'（fine.pt，M3）| 'v2'（fine_v2.pt，M6 +内容特征）。"""
         feats = np.load(config.ART_DIR / "item_feats.npz", allow_pickle=True)
         genre_mh = feats["genre_multihot"]
         year_b = feats["year_bucket"]
@@ -293,14 +351,24 @@ class FineRank:
         movie_ids = _movie_ids()
         n_users = int(pd.read_parquet(
             config.ART_DIR / "users.parquet").user_id.max())
-        model = DeepFM(n_users, len(movie_ids), genre_mh.shape[1])
-        model.load_state_dict(torch.load(
-            config.ART_DIR / "fine.pt", map_location="cpu", weights_only=True))
+        content = mood = None
+        path = config.ART_DIR / "fine.pt"
+        n_dense = 6
+        if variant == "v2":
+            path = config.ART_DIR / "fine_v2.pt"
+            n_dense = 8
+            content = np.load(config.ART_DIR / "content_emb.npy")
+            from src.data.content import mood_onehot
+            mood, _ = mood_onehot()
+        model = DeepFM(n_users, len(movie_ids), genre_mh.shape[1],
+                       n_dense=n_dense)
+        model.load_state_dict(torch.load(path, map_location="cpu",
+                                         weights_only=True))
         from src.recall.sasrec import load_sas_model, MAX_LEN
         sas_model, _ = load_sas_model()
         cls.MAX_LEN = MAX_LEN
         return cls(model, movie_ids, genre_mh, year_b, tt_embs, hot_df,
-                   n_users, sas_model)
+                   n_users, sas_model, content=content, mood=mood)
 
     def _sas_scores(self, hist_mids):
         """当前序列一次前向 → 全库 logit/10 分数向量 [V]；无历史返回 None。"""
@@ -366,6 +434,21 @@ class FineRank:
             self.st.pop_log[tgt - 1],
             self.st.wr[tgt - 1] / 5.0,
             sas_sig.astype(np.float32)], 1)
+        if self.with_content:
+            # M6 v2：内容相似度 + 基调匹配（候选未看过，无排除，与训练口径一致）
+            rows = [self.mid2row[m] for m in hist_mids
+                    if m in self.mid2row]
+            if rows:
+                S = self.st.content[rows].sum(0)
+                M = self.st.mood[rows].sum(0)
+                csim = (self.st.content[tgt - 1] @ S) / max(
+                    float(np.linalg.norm(S)), 1e-9)
+                mmatch = (self.st.mood[tgt - 1] @ M) / len(rows)
+            else:
+                csim = np.zeros(n, dtype=np.float32)
+                mmatch = np.zeros(n, dtype=np.float32)
+            dense = np.hstack([dense, np.stack([csim, mmatch], 1
+                                               ).astype(np.float32)])
         with torch.no_grad():
             logits = self.model(
                 torch.from_numpy(idx_mat), torch.from_numpy(val_mat),

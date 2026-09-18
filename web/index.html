@@ -189,6 +189,49 @@
   .badge.hot      { background: rgba(244, 176, 74, .13); color: var(--warn); }
   .badge.cold     { background: rgba(244, 114, 182, .13); color: #f29ec5; }
   .badge.query    { background: rgba(129, 140, 248, .15); color: #a5b0ff; }
+  .badge.lightgcn { background: rgba(163, 230, 53, .13); color: #b4ec6a; }
+  .badge.semantic { background: rgba(34, 211, 238, .13); color: #5ad9ec; }
+
+  /* 用户搜索下拉（M6+） */
+  .userbox { position: relative; }
+  .userbtn { min-width: 200px; text-align: left; font-weight: 600; }
+  .usermenu {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    width: 280px; background: #1a1a1e; border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+  }
+  .usermenu input { width: 100%; margin-bottom: 6px; }
+  .userlist { max-height: 250px; overflow-y: auto; }
+  .uitem {
+    display: flex; justify-content: space-between; align-items: center;
+    width: 100%; padding: 7px 10px; border: none; border-radius: 7px;
+    background: none; color: var(--text); font-size: 13px; cursor: pointer;
+    text-align: left;
+  }
+  .uitem:hover { background: var(--bg-hover); }
+  .uitem .pos { color: var(--text-faint); font-size: 11.5px; }
+  .uitem.cur { background: rgba(229, 9, 20, .12); color: #ff9a93; }
+  .newuser {
+    width: 100%; margin-top: 6px; padding: 7px; border-radius: 7px;
+    border: 1px dashed #4a4a55; background: none; color: var(--text-dim);
+    font-size: 12.5px; cursor: pointer;
+  }
+  .newuser:hover { color: var(--text); border-color: #6a6a75; }
+
+  /* 通道/阶段切换（M6+ 消融面板） */
+  .chiprow { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap;
+             align-items: center; font-size: 12px; }
+  .chiprow .lbl { color: var(--text-faint); }
+  #channelChips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tch {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 3px 12px; color: var(--text-dim);
+    cursor: pointer; font-size: 12px; transition: all .15s;
+  }
+  .tch:hover { border-color: #5a5a66; }
+  .tch.on { background: rgba(229, 9, 20, .13); border-color: rgba(229, 9, 20, .5); color: #ff9a93; }
+  .seg.small button { padding: 4px 11px; font-size: 12px; }
 
   #queryInput { width: 230px; }
   .navlink {
@@ -377,10 +420,16 @@
     <span class="sub">四段漏斗 · LLM 增强 · 实时回流 · 消融对照</span>
   </div>
   <div class="controls">
+    <div class="userbox" id="userBox">
+      <button class="userbtn" id="userBtn">👤 用户 —</button>
+      <div class="usermenu" id="userMenu" hidden>
+        <input id="userSearch" type="text" placeholder="搜索用户 ID…" autocomplete="off">
+        <div class="userlist" id="userList"></div>
+        <button class="newuser" id="newUserBtn">＋ 创建新用户（冷启动演示）</button>
+      </div>
+    </div>
     <input id="queryInput" type="text" placeholder="来部轻松的科幻片…" maxlength="60">
     <button id="queryBtn" title="自然语言查询（LLM 解析 → 类型过滤 + 双塔检索）">🔍 查询</button>
-    <select id="userSel"></select>
-    <input id="userInput" type="number" placeholder="自定义 user_id" min="1">
     <div class="seg">
       <button id="modeFull" class="on">完整链路</button>
       <button id="modePopular">纯热门</button>
@@ -389,6 +438,20 @@
     <button id="cmpToggle" title="同屏对比：完整链路 vs 纯热门（O3 消融）">⚖️ 对比</button>
     <button id="refresh">↻ 刷新</button>
     <a class="navlink" href="/eval" target="_blank" title="离线评测报告">📊 评测报告</a>
+  </div>
+  <div class="chiprow">
+    <span class="lbl">召回</span>
+    <span id="channelChips"></span>
+    <span class="lbl" style="margin-left:8px">粗排</span>
+    <div class="seg small" id="coarseSeg">
+      <button data-co="keep" class="on" title="通道保持式压缩：每通道保留头部配额，只过滤不重排（M3 修订版，默认）">压缩</button>
+      <button data-co="tt" title="双塔点积 + 口碑先验全局重排（M3 初版；评测显示其压制强通道头部，HR 0.186→0.119，保留用于对比演示）">双塔</button>
+      <button data-co="none" title="跳过粗排，融合候选直通精排">跳过</button>
+    </div>
+    <span class="lbl" style="margin-left:8px">精排</span>
+    <div class="seg small" id="rankerSeg"></div>
+    <span class="lbl" style="margin-left:8px">重排</span>
+    <div class="seg small" id="rrSeg"></div>
   </div>
   <div id="profile" class="profile"></div>
 </header>
@@ -400,20 +463,112 @@
 const $ = id => document.getElementById(id);
 let curUser = null, curMode = 'full', llmOn = true, compareOn = false;
 let lastTopIds = [], llmSeq = 0, queryResult = null;
+let curRanker = 'v1', curRerank = 'mmr', curCoarse = 'keep';
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g,
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 const SRC_NAME = {itemcf:'ItemCF', twotower:'双塔', sasrec:'序列',
-                  hot:'热门', cold:'冷门', query:'查询'};
+                  hot:'热门', cold:'冷门', query:'查询',
+                  lightgcn:'LightGCN', semantic:'语义'};
 const srcName = s => SRC_NAME[s] || s;
+
+const RANKER_LABEL = {v1: 'v1·DeepFM', v2: 'v2·+内容', none: '无'};
+const RR_LABEL = {mmr: 'MMR', dpp: 'DPP', none: '无'};
+
+async function loadMeta() {
+  const m = await (await fetch('/api/meta')).json();
+  $('channelChips').innerHTML = m.channels.map(c =>
+    `<button class="tch on" data-ch="${esc(c)}" title="点击启停该召回通道（多选）">${srcName(c)}</button>`
+  ).join('');
+  $('rankerSeg').innerHTML = m.rankers.map(v =>
+    `<button class="${v === curRanker ? 'on' : ''}" data-v="${v}"
+             title="${v === 'none' ? '跳过精排，粗排候选直通规则重排' : ''}">
+      ${RANKER_LABEL[v] || v}</button>`).join('');
+  $('rankerSeg').onclick = e => {
+    const b = e.target.closest('button[data-v]');
+    if (!b) return;
+    curRanker = b.dataset.v;
+    $('rankerSeg').querySelectorAll('button').forEach(
+      x => x.classList.toggle('on', x === b));
+    refresh();
+  };
+  $('rrSeg').innerHTML = m.rerankers.map(v =>
+    `<button class="${v === curRerank ? 'on' : ''}" data-v="${v}"
+             title="${v === 'none' ? '仅规则重排（无多样性算法）' : ''}">
+      ${RR_LABEL[v] || v}</button>`).join('');
+  $('rrSeg').onclick = e => {
+    const b = e.target.closest('button[data-v]');
+    if (!b) return;
+    curRerank = b.dataset.v;
+    $('rrSeg').querySelectorAll('button').forEach(
+      x => x.classList.toggle('on', x === b));
+    refresh();
+  };
+}
+
+function channelParam() {
+  return [...document.querySelectorAll('#channelChips .tch.on')]
+    .map(b => b.dataset.ch).join(',');
+}
+
+let userPool = [];
 
 async function loadUsers() {
   const r = await (await fetch('/api/users')).json();
-  $('userSel').innerHTML = r.sample_users.map(u =>
-    `<option value="${u.user_id}">用户 ${u.user_id}（${u.positives} 部正反馈）</option>`).join('');
-  curUser = r.sample_users[0].user_id;
+  userPool = r.sample_users;
+  curUser = userPool[0].user_id;
+  updateUserBtn();
+  renderUserList('');
+}
+
+function updateUserBtn() {
+  const p = userPool.find(x => x.user_id === curUser);
+  $('userBtn').textContent = p
+    ? `👤 用户 ${curUser} · ${p.positives} 部正反馈`
+    : `👤 用户 ${curUser}（新用户）`;
+}
+
+function renderUserList(q) {
+  q = String(q || '').trim();
+  const list = userPool.filter(u => !q || String(u.user_id).includes(q));
+  const shown = q ? list : list.slice(0, 5);        // 默认展示 5 个高活跃用户
+  let html = shown.map(u =>
+    `<button class="uitem ${u.user_id === curUser ? 'cur' : ''}" data-id="${u.user_id}">
+       <span>用户 ${u.user_id}</span><span class="pos">${u.positives} 部正反馈</span>
+     </button>`).join('');
+  // 纯数字且未在列表中 → 直达（ML-1M 用户段 1..6040 连续，任意 ID 均存在）
+  if (/^\d+$/.test(q)) {
+    const n = parseInt(q, 10);
+    if (n >= 1 && !list.some(u => u.user_id === n)) {
+      html += `<button class="uitem" data-id="${n}">
+                 <span>选择用户 ${n}</span><span class="pos">直接跳转</span>
+               </button>`;
+    }
+  }
+  if (!html) {
+    html = '<div style="padding:10px;color:var(--text-faint);font-size:12px">'
+         + '无匹配用户，输入数字可直达任意用户 ID</div>';
+  }
+  $('userList').innerHTML = html;
+}
+
+function selectUser(id) {
+  curUser = id;
+  updateUserBtn();
+  toggleUserMenu(false);
+  refresh();
+}
+
+function toggleUserMenu(show) {
+  const m = $('userMenu');
+  m.hidden = !(show === undefined ? m.hidden : show);
+  if (!m.hidden) {
+    $('userSearch').value = '';
+    renderUserList('');
+    $('userSearch').focus();
+  }
 }
 
 function showSkeleton() {
@@ -462,7 +617,11 @@ async function refresh() {
 }
 
 async function refreshNormal() {
-  const r = await (await fetch(`/api/recommend?user_id=${curUser}&mode=${curMode}`)).json();
+  const r = await (await fetch(
+      `/api/recommend?user_id=${curUser}&mode=${curMode}` +
+      `&rerank=${curRerank}&ranker=${curRanker}&coarse=${curCoarse}` +
+      `&channels=${encodeURIComponent(channelParam())}`
+  )).json();
   renderProfile(r.profile);
   const sections = queryResult ? [querySection(), ...r.rows] : r.rows;
   $('rows').innerHTML = sections.map(rowHTML).join('');
@@ -471,7 +630,11 @@ async function refreshNormal() {
 }
 
 async function refreshCompare() {
-  const r = await (await fetch(`/api/compare?user_id=${curUser}`)).json();
+  const r = await (await fetch(
+      `/api/compare?user_id=${curUser}` +
+      `&rerank=${curRerank}&ranker=${curRanker}&coarse=${curCoarse}` +
+      `&channels=${encodeURIComponent(channelParam())}`
+  )).json();
   renderProfile(r.profile);
   const m = r.metrics;
   const pct = x => (x * 100).toFixed(0) + '%';
@@ -778,18 +941,48 @@ $('cmpToggle').onclick = () => {
   $('cmpToggle').classList.toggle('on', compareOn);
   refresh();
 };
+$('channelChips').addEventListener('click', e => {
+  const b = e.target.closest('.tch');
+  if (!b) return;
+  b.classList.toggle('on');
+  refresh();
+});
+$('coarseSeg').onclick = e => {
+  const b = e.target.closest('button[data-co]');
+  if (!b) return;
+  curCoarse = b.dataset.co;
+  $('coarseSeg').querySelectorAll('button').forEach(
+    x => x.classList.toggle('on', x === b));
+  refresh();
+};
+$('userBtn').onclick = e => { e.stopPropagation(); toggleUserMenu(); };
+$('userSearch').oninput = e => renderUserList(e.target.value);
+$('userList').onclick = e => {
+  const b = e.target.closest('.uitem');
+  if (b) selectUser(+b.dataset.id);
+};
+$('newUserBtn').onclick = async e => {
+  e.stopPropagation();
+  try {
+    const r = await (await fetch('/api/users', {method: 'POST'})).json();
+    userPool.unshift({user_id: r.user_id, positives: 0});
+    selectUser(r.user_id);
+    toast(`已创建新用户 ${r.user_id}：冷启动走热门兜底，`
+         + '在详情页喜欢几部电影后推荐将实时个性化');
+  } catch (err) {
+    toast('创建失败，请重试');
+  }
+};
+document.addEventListener('click', e => {
+  if (!e.target.closest('#userBox')) toggleUserMenu(false);
+});
 $('queryBtn').onclick = doQuery;
 $('queryInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') doQuery();
 });
 $('refresh').onclick = refresh;
-$('userSel').onchange = () => { curUser = +$('userSel').value;
-                               $('userInput').value = ''; refresh(); };
-$('userInput').onchange = () => {
-  const v = +$('userInput').value;
-  if (v > 0) { curUser = v; refresh(); }
-};
 
+loadMeta();
 loadUsers().then(refresh);
 </script>
 </body>

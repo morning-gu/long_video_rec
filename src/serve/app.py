@@ -27,9 +27,12 @@ from src.rank.coarse import CoarseRank
 from src.rank.fine import FineRank
 from src.recall.hot import HotRecall
 from src.recall.itemcf import ItemCFRecall
+from src.recall.lightgcn import LightGCNRecall
 from src.recall.merge import merge
 from src.recall.sasrec import SASRecRecall
+from src.recall.semantic import SemanticRecall
 from src.recall.twotower import TwoTowerRecall
+from src.rerank.dpp import dpp_order
 from src.rerank.mmr import mmr_order
 from src.rerank.rules import rule_rerank
 from src.state.user_state import UserStateStore
@@ -62,9 +65,23 @@ class Recommender:
         self.tt = TwoTowerRecall.load()
         self.sas = SASRecRecall.load()
         self.hot = HotRecall(hot_df)
-        self.coarse = CoarseRank()
-        self.fine = FineRank.load()
+        self.coarse = CoarseRank(tt_item_embs=self.tt.item_embs, hot=self.hot,
+                                 movie_ids=movie_ids)
+        self.fine = FineRank.load("v1")
+        # M6：精排 v2（+内容特征），产物存在才加载；v1 保留可切换
+        self.fine2 = (FineRank.load("v2")
+                      if (config.ART_DIR / "fine_v2.pt").exists() else None)
+        self.rankers = ["v1"] + (["v2"] if self.fine2 else [])
         self.llm = LLMService()
+        # M6 新增通道（产物存在才加载；旧通道不受影响，可运行时切换对比）
+        self.lightgcn = (LightGCNRecall.load()
+                         if (config.ART_DIR / "lg_user_emb.npy").exists() else None)
+        self.semantic = (SemanticRecall.load()
+                         if (config.ART_DIR / "content_emb.npy").exists() else None)
+        self.channels_available = ["itemcf", "twotower", "sasrec", "hot"] + (
+            ["lightgcn"] if self.lightgcn else []) + (
+            ["semantic"] if self.semantic else [])
+        self.rerankers = list(config.RERANKERS)
         # 海报（IMDb 源，scripts/enrich_posters.py 产出；缺图前端回退渐变占位）
         self.posters = {}
         posters_path = config.ART_DIR / "posters.parquet"
@@ -79,42 +96,80 @@ class Recommender:
 
     # ---- 四段漏斗 ----
 
-    def funnel(self, user_id: int, mode: str = "full"):
-        """返回 (stages, state)。stages: channels / recall / coarse / fine /
-        rules / final 各阶段候选列表（popular 模式只走 非个性化路径）。"""
+    def funnel(self, user_id: int, mode: str = "full", channels=None,
+               rerank: str = "mmr", ranker: str = "v1", coarse: str = "keep"):
+        """返回 (stages, state)。
+
+        channels: 启用的召回通道列表（None = 全部可用；多选）。
+        coarse: "keep"（通道保持压缩）| "tt"（双塔点积+口碑先验，M3 初版）
+        | "none"（跳过，融合候选直通精排）。
+        ranker: "v1" | "v2" | "none"（跳过精排，粗排候选直通规则重排）。
+        rerank: "mmr" | "dpp" | "none"（仅规则重排，无多样性算法）。
+        （M6+：各阶段算法可运行时组合切换，旧实现全部保留。）
+        """
         state = self.store.get(user_id)
         exclude = state.seen | state.suppress
+        active = set(channels) if channels else set(self.channels_available)
 
         # ① 多路召回 + ② 配额融合
-        channels, quotas = {}, {}
+        ch, quotas = {}, {}
         if mode == "full" and state.seeds:
-            channels["itemcf"] = self.itemcf.recall(
-                state.seeds, exclude, config.ITEMCF_QUOTA)
-            quotas["itemcf"] = config.ITEMCF_QUOTA
-            channels["twotower"] = self.tt.recall(
-                user_id, state.recent_positives, exclude, config.TWOTOWER_QUOTA)
-            quotas["twotower"] = config.TWOTOWER_QUOTA
-            channels["sasrec"] = self.sas.recall(
-                state.recent_positives, exclude, config.SASREC_QUOTA)
-            quotas["sasrec"] = config.SASREC_QUOTA
-        channels["hot"] = self.hot.top(exclude, config.HOT_QUOTA)
-        quotas["hot"] = config.HOT_QUOTA
-        merged = merge(channels, quotas)
-        stages = {"channels": channels, "recall": merged}
+            if "itemcf" in active:
+                ch["itemcf"] = self.itemcf.recall(
+                    state.seeds, exclude, config.ITEMCF_QUOTA)
+                quotas["itemcf"] = config.ITEMCF_QUOTA
+            if "twotower" in active:
+                ch["twotower"] = self.tt.recall(
+                    user_id, state.recent_positives, exclude,
+                    config.TWOTOWER_QUOTA)
+                quotas["twotower"] = config.TWOTOWER_QUOTA
+            if "sasrec" in active:
+                ch["sasrec"] = self.sas.recall(
+                    state.recent_positives, exclude, config.SASREC_QUOTA)
+                quotas["sasrec"] = config.SASREC_QUOTA
+            if self.lightgcn is not None and "lightgcn" in active:
+                ch["lightgcn"] = self.lightgcn.recall(
+                    user_id, exclude, config.LIGHTGCN_QUOTA)
+                quotas["lightgcn"] = config.LIGHTGCN_QUOTA
+            if self.semantic is not None and "semantic" in active:
+                ch["semantic"] = self.semantic.recall(
+                    state.recent_positives, exclude, config.SEMANTIC_QUOTA)
+                quotas["semantic"] = config.SEMANTIC_QUOTA
+        if "hot" in active or not ch:             # 热门兜底（通道全关时）
+            ch["hot"] = self.hot.top(exclude, config.HOT_QUOTA)
+            quotas["hot"] = config.HOT_QUOTA
+        merged = merge(ch, quotas)
+        stages = {"channels": ch, "recall": merged}
 
         if mode == "full" and state.seeds:
-            # ③ 粗排：通道保持式压缩（M3 评测驱动修订，见 coarse.py 注释）
-            stages["coarse"] = self.coarse.rank(merged)
-            # ④ 精排（DeepFM + 序列信号分数级融合，含交叉特征）
-            stages["fine"] = self.fine.rank(
-                user_id, state.recent_positives, len(state.seen),
-                stages["coarse"], config.FINE_TOPN)
-            # ⑤ 重排：规则（已看/打散/冷门保量）+ MMR 多样性
+            # ③ 粗排（keep=通道保持压缩 | tt=双塔点积+口碑先验 | none=跳过）
+            if coarse == "none":
+                stages["coarse"] = list(merged)
+            elif coarse == "tt":
+                u_emb = self.tt.user_embed(user_id, state.recent_positives)
+                stages["coarse"] = self.coarse.rank(merged, "tt", u_emb)
+            else:
+                stages["coarse"] = self.coarse.rank(merged)
+            # ④ 精排（v1=M3；v2=M6 +内容特征；none=跳过）
+            if ranker == "none":
+                stages["fine"] = list(stages["coarse"])
+            else:
+                fine_model = self.fine2 if (ranker == "v2" and self.fine2) \
+                    else self.fine
+                stages["fine"] = fine_model.rank(
+                    user_id, state.recent_positives, len(state.seen),
+                    stages["coarse"], config.FINE_TOPN)
+            # ⑤ 重排：规则（已看/打散/冷门保量）+ 多样性（MMR | DPP | 无）
             ruled = rule_rerank(stages["fine"], self.movie_info, state,
                                 self.hot.hot_set, config.ROW_K)
             stages["rules"] = ruled
-            final = mmr_order(ruled, self.tt.item_embs,
-                              self.tt.mid2row, config.MMR_LAMBDA)
+            if rerank == "dpp":
+                final = dpp_order(ruled, self.tt.item_embs, self.tt.mid2row)
+            elif rerank == "none":
+                final = list(ruled)
+            else:
+                final = mmr_order(ruled, self.tt.item_embs,
+                                  self.tt.mid2row, config.MMR_LAMBDA)
             # 展示分：融合分数量纲大（γ·logit 过 sigmoid 饱和），
             # 列表内按秩归一（score 此后仅用于展示，不影响任何逻辑）
             for i, c in enumerate(final):
@@ -127,8 +182,11 @@ class Recommender:
 
     # ---- 行式推荐 ----
 
-    def recommend(self, user_id: int, mode: str = "full") -> dict:
-        stages, state = self.funnel(user_id, mode)
+    def recommend(self, user_id: int, mode: str = "full", channels=None,
+                  rerank: str = "mmr", ranker: str = "v1",
+                  coarse: str = "keep") -> dict:
+        stages, state = self.funnel(user_id, mode, channels, rerank, ranker,
+                                    coarse)
         exclude = state.seen | state.suppress
         note = "" if (mode == "popular" or state.seeds) else "冷启动用户：热门兜底"
         rows = [{"key": "for_you", "title": "为你推荐", "note": note,
@@ -191,13 +249,42 @@ def index():
     return FileResponse(config.WEB_DIR / "index.html")
 
 
+@app.get("/api/meta")
+def meta():
+    """可用算法组合（M6+ 前端切换面板数据源）：召回通道（多选）+
+    粗排/精排/重排（各单选，均含"无"做完全消融）。"""
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    return {"channels": REC.channels_available,
+            "rerankers": list(config.RERANKERS) + ["none"],
+            "rankers": REC.rankers + ["none"],
+            "coarse": ["keep", "tt", "none"]}
+
+
 @app.get("/api/recommend")
-def recommend(user_id: int, mode: str = "full"):
+def recommend(user_id: int, mode: str = "full", channels: str = "",
+              rerank: str = "mmr", ranker: str = "v1", coarse: str = "keep"):
+    """漏斗四阶段算法组合（M6+）：channels 多选；
+    rerank: mmr|dpp|none；ranker: v1|v2|none；coarse: keep|none。"""
     if REC is None:
         raise HTTPException(503, "artifacts loading")
     if mode not in ("full", "popular"):
         raise HTTPException(400, "mode must be full|popular")
-    return REC.recommend(user_id, mode)
+    if rerank not in (*config.RERANKERS, "none"):
+        raise HTTPException(400, f"rerank must be one of "
+                                 f"{(*config.RERANKERS, 'none')}")
+    if ranker not in (*REC.rankers, "none"):
+        raise HTTPException(400, f"ranker must be one of "
+                                 f"{(*REC.rankers, 'none')}")
+    if coarse not in ("keep", "tt", "none"):
+        raise HTTPException(400, "coarse must be keep|tt|none")
+    ch_list = [c.strip() for c in channels.split(",") if c.strip()]
+    unknown = [c for c in ch_list if c not in REC.channels_available]
+    if unknown:
+        raise HTTPException(400, f"unknown channels {unknown}; "
+                                 f"available: {REC.channels_available}")
+    return REC.recommend(user_id, mode, ch_list or None, rerank, ranker,
+                         coarse)
 
 
 class Event(BaseModel):
@@ -337,11 +424,17 @@ def query(req: QueryReq):
 
 
 @app.get("/api/compare")
-def compare(user_id: int):
-    """同屏对比（M5）：完整链路 vs 纯热门 + 实时列表指标（§6 消融叙事）。"""
+def compare(user_id: int, channels: str = "", rerank: str = "mmr",
+            ranker: str = "v1", coarse: str = "keep"):
+    """同屏对比（M5）：完整链路 vs 纯热门 + 实时列表指标（§6 消融叙事）。
+
+    channels/rerank/ranker/coarse 参数与 /api/recommend 一致（M6+）。
+    """
     if REC is None:
         raise HTTPException(503, "artifacts loading")
-    full_stages, full_state = REC.funnel(user_id, "full")
+    ch_list = [c.strip() for c in channels.split(",") if c.strip()] or None
+    full_stages, full_state = REC.funnel(user_id, "full", ch_list, rerank,
+                                         ranker, coarse)
     pop_stages, _ = REC.funnel(user_id, "popular")
     full, pop = full_stages["final"], pop_stages["final"]
 
@@ -425,11 +518,27 @@ def llm_failures(limit: int = 20):
 
 @app.get("/api/users")
 def users():
+    """高活跃样本用户（下拉框数据源，默认前端只展示前 5 个，可搜索）。"""
     if REC is None:
         raise HTTPException(503, "artifacts loading")
     return {"sample_users": [
         {"user_id": int(u), "positives": int(n)}
-        for u, n in REC.pos_count.head(20).items()]}
+        for u, n in REC.pos_count.head(50).items()]}
+
+
+@app.post("/api/users")
+def create_user():
+    """创建新用户（冷启动演示）：ID 从 9001 起，避开 ML-1M 存量段 1..6040。
+
+    新用户无历史 → 热门兜底；经详情页喜欢/评分后由用户状态实时层即时个性化。
+    """
+    if REC is None:
+        raise HTTPException(503, "artifacts loading")
+    row = REC.store.db.execute(
+        "SELECT MAX(user_id) FROM events WHERE user_id > 9000").fetchone()
+    REC._next_new_user = max(getattr(REC, "_next_new_user", 9000),
+                             row[0] or 9000) + 1
+    return {"user_id": REC._next_new_user}
 
 
 @app.post("/api/reload_posters")

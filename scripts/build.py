@@ -127,6 +127,24 @@ def main() -> None:
         sas_model = train_sasrec(seqs)
         torch.save(sas_model.state_dict(), config.ART_DIR / "sasrec.pt")
         print("saved sasrec.pt")
+
+        # ---- M6：LightGCN 图召回（CPU 约 15 分钟）----
+        print("training LightGCN ...")
+        from src.recall.lightgcn import train_lightgcn
+        lg_u, lg_i = train_lightgcn(train_pos, n_users, len(movies))
+        np.save(config.ART_DIR / "lg_user_emb.npy", lg_u)
+        np.save(config.ART_DIR / "lg_item_emb.npy", lg_i)
+        print("saved lg_user_emb.npy + lg_item_emb.npy")
+
+        # ---- M6：内容画像 → 内容向量（依赖 scripts/enrich_profiles.py 先跑）----
+        if (config.ART_DIR / "profiles.parquet").exists():
+            from src.data.content import build_content_vectors
+            vec = build_content_vectors()
+            np.save(config.ART_DIR / "content_emb.npy", vec)
+            print(f"saved content_emb.npy  shape={vec.shape}")
+        else:
+            print("profiles.parquet 不存在，跳过内容向量"
+                  "（先运行 python scripts/enrich_profiles.py）")
     else:
         # 仅重建精排：加载 M1/M2 产物
         ratings = pd.read_parquet(config.ART_DIR / "ratings.parquet")
@@ -141,27 +159,40 @@ def main() -> None:
         hot_df = pd.read_parquet(config.ART_DIR / "hot.parquet")
         tt_item_embs = np.load(config.ART_DIR / "tt_item_emb.npy")
 
-    # ---- M3：DeepFM-lite 精排 ----
-    print("training DeepFM-lite fine rank ...")
+    # ---- M3/M6：精排 v1（DeepFM）+ v2（+内容特征，需 content_emb.npy）----
+    print("training fine rank v1 (DeepFM) ...")
     fine_model = train_fine(train_pos, ratings, genre_mh, year_b, tt_item_embs,
                             hot_df, n_users)
     torch.save(fine_model.state_dict(), config.ART_DIR / "fine.pt")
     print("saved fine.pt")
-    fine_auc(FineRank.load(), ratings, train_pos, test_pos, movie_ids)
+    fine_auc(FineRank.load("v1"), ratings, train_pos, test_pos, movie_ids)
+    if (config.ART_DIR / "content_emb.npy").exists():
+        print("training fine rank v2 (DeepFM + 内容特征) ...")
+        fine_v2 = train_fine(train_pos, ratings, genre_mh, year_b,
+                             tt_item_embs, hot_df, n_users, with_content=True)
+        torch.save(fine_v2.state_dict(), config.ART_DIR / "fine_v2.pt")
+        print("saved fine_v2.pt")
 
     if only != "fine":
         # ---- sanity 评测（走与线上相同的加载路径）----
         itemcf = ItemCFRecall(sim, movie_ids)
         tt = TwoTowerRecall.load()
         sas = SASRecRecall.load()
-        sanity_eval(
-            {
-                "itemcf": lambda u, seq, seen: itemcf.recall(
-                    list(reversed(seq[-config.SEED_TOPK:])), seen, 10),
-                "twotower": lambda u, seq, seen: tt.recall(u, seq, seen, 10),
-                "sasrec": lambda u, seq, seen: sas.recall(seq, seen, 10),
-            },
-            HotRecall(hot_df), ratings, train_pos, test_pos)
+        fns = {
+            "itemcf": lambda u, seq, seen: itemcf.recall(
+                list(reversed(seq[-config.SEED_TOPK:])), seen, 10),
+            "twotower": lambda u, seq, seen: tt.recall(u, seq, seen, 10),
+            "sasrec": lambda u, seq, seen: sas.recall(seq, seen, 10),
+        }
+        if (config.ART_DIR / "lg_user_emb.npy").exists():
+            from src.recall.lightgcn import LightGCNRecall
+            lg = LightGCNRecall.load()
+            fns["lightgcn"] = lambda u, seq, seen: lg.recall(u, seen, 10)
+        if (config.ART_DIR / "content_emb.npy").exists():
+            from src.recall.semantic import SemanticRecall
+            sem = SemanticRecall.load()
+            fns["semantic"] = lambda u, seq, seen: sem.recall(seq, seen, 10)
+        sanity_eval(fns, HotRecall(hot_df), ratings, train_pos, test_pos)
     print("\nbuild done. 启动服务：python scripts/run.py → http://localhost:8000")
     print("评测报告：python scripts/eval.py → docs/评测报告.md")
 

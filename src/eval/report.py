@@ -79,16 +79,25 @@ def run(n_users: int = 1000, seed: int = 42):
     ndcg10 = 0.0
     ilad_sum, longtail_slots, pop_sum, total_slots = 0.0, 0, 0.0, 0
     covered = set()
+    old_channels = ["itemcf", "twotower", "sasrec", "hot"]   # M2 通道集
+    from src.rerank.dpp import dpp_order
     for u in users:
         t = test_map[u]
-        stages, _state = rec.funnel(int(u), "full")
+        stages, _state = rec.funnel(int(u), "full")          # 全通道（M6 默认）
+        stages_old, _ = rec.funnel(int(u), "full", old_channels)
         for name, ch in stages["channels"].items():
             k = f"通道:{name}"
             stage_hits[k] = stage_hits.get(k, 0) + _hit(ch, t, 10)
+        stage_hits["fusion_old"] = stage_hits.get("fusion_old", 0) + \
+            _hit(stages_old["recall"], t, 10)
         for st in ("recall", "coarse", "fine", "rules", "final"):
             stage_hits[st] = stage_hits.get(st, 0) + _hit(stages[st], t, 10)
         stage_hits["final@20"] = stage_hits.get("final@20", 0) + \
             _hit(stages["final"], t, 20)
+        final_dpp = dpp_order(stages["rules"], rec.tt.item_embs,
+                              rec.tt.mid2row)
+        stage_hits["final_dpp"] = stage_hits.get("final_dpp", 0) + \
+            _hit(final_dpp, t, 10)
         stage_hits["hot"] = stage_hits.get("hot", 0) + (t in hot_top10)
         r = _rank(stages["final"], t)
         if r <= 10:
@@ -109,20 +118,24 @@ def run(n_users: int = 1000, seed: int = 42):
 
     # ---- 结构化数据（展示页 / JSON）----
     ch_label = {"itemcf": "ItemCF 单通道", "twotower": "双塔 单通道",
-                "sasrec": "SASRec 单通道", "hot": "热门 通道"}
+                "sasrec": "SASRec 单通道", "hot": "热门 通道",
+                "lightgcn": "LightGCN 单通道", "semantic": "语义 单通道"}
     ch_note = {"itemcf": "共现相似", "twotower": "向量召回",
-               "sasrec": "序列建模", "hot": "流行度"}
+               "sasrec": "序列建模", "hot": "流行度",
+               "lightgcn": "图传播（M6）", "semantic": "内容画像（M6）"}
     funnel = [{"stage": "纯热门（非个性化基线）", "hr10": stage_hits["hot"] / n,
                "note": "必须打赢的简单强基线（Ferrari Dacrema）", "channel": False}]
-    for name in ("itemcf", "twotower", "sasrec", "hot"):
+    for name in ("itemcf", "twotower", "sasrec", "lightgcn", "semantic", "hot"):
         k = f"通道:{name}"
         if k in stage_hits:
             funnel.append({"stage": ch_label[name],
                            "hr10": stage_hits[k] / n,
                            "note": ch_note.get(name, ""), "channel": True})
     funnel += [
-        {"stage": "四路融合（召回后）", "hr10": stage_hits["recall"] / n,
-         "note": "配额交错去重", "channel": False},
+        {"stage": "四路融合（M2 通道集）", "hr10": stage_hits["fusion_old"] / n,
+         "note": "召回后，配额交错去重", "channel": False},
+        {"stage": "全通道融合（M6）", "hr10": stage_hits["recall"] / n,
+         "note": "召回后，配额交错去重", "channel": False},
         {"stage": "+ 粗排", "hr10": stage_hits["coarse"] / n,
          "note": "通道保持式压缩（目标一致性修订）", "channel": False},
         {"stage": "+ 精排", "hr10": stage_hits["fine"] / n,
@@ -131,6 +144,8 @@ def run(n_users: int = 1000, seed: int = 42):
          "note": "打散/冷门保量（多样性约束的代价）", "channel": False},
         {"stage": "+ MMR（最终 Top-10）", "hr10": stage_hits["final"] / n,
          "note": "完整链路", "channel": False},
+        {"stage": "+ DPP（最终 Top-10）", "hr10": stage_hits["final_dpp"] / n,
+         "note": "重排器可切换（M6）", "channel": False},
         {"stage": "最终 Top-20", "hr10": stage_hits["final@20"] / n,
          "note": "", "channel": False},
     ]
@@ -165,6 +180,12 @@ def run(n_users: int = 1000, seed: int = 42):
             "纯序列排序 HR@10 为 0.258——特征交叉模型在本数据规模相对序列信号无净增量，"
             "系 Ferrari Dacrema 批评（文档 01 §5.2）的本地复现；工业系统中精排需以"
             "漏斗曝光分布训练方能超越（文档 03 趋势 2）",
+            "M6 通道稀释效应：LightGCN(0.045)/语义(0.034) 单通道弱于协同通道，"
+            "全通道融合(0.159)低于 M2 四路融合(0.186)——弱通道头部经交错融合挤占"
+            "强通道的 Top-10 席位；但精排的序列信号融合将最终链路拉回至 0.199"
+            "（与 M3 的 0.198 持平），覆盖率/NDCG/Top-20 略有提升。通道可在界面"
+            "逐个启停对比（M6 切换面板）；LightGCN 受本机优化预算限制"
+            "（官方约 50 万步 vs 本机 2 千步），M8 强算力机器充分训练后复评",
             "评测与线上共用同一 funnel() 代码路径，无训练-服务偏移",
         ],
     }

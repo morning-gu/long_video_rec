@@ -49,6 +49,8 @@ ITEMCF_QUOTA = 200          # ItemCF 通道配额
 TWOTOWER_QUOTA = 300        # 双塔通道配额（M2）
 SASREC_QUOTA = 150          # 序列通道配额（M2）
 HOT_QUOTA = 50              # 热门通道配额
+LIGHTGCN_QUOTA = 150        # LightGCN 通道配额（M6）
+SEMANTIC_QUOTA = 150        # 内容语义通道配额（M6）
 COARSE_TOPN = 200           # 粗排输出（M3）
 FINE_TOPN = 50              # 精排输出（M3）
 ROW_K = 20                  # 主推荐行数量
@@ -67,6 +69,7 @@ GENRE_CAP = 6               # 最终列表单类型上限
 HOT_SET_SIZE = 500          # 热门集合规模（冷门保量分界）
 COLD_RATIO = 0.2            # 冷门保量最低比例
 MMR_LAMBDA = 0.4            # MMR 多样性权重 λ
+RERANKERS = ("mmr", "dpp")  # 可用重排器（M6 起可切换，旧实现保留）
 
 # ---- 热门平滑（设计文档 §4.1）----
 BAYES_C = 200               # 贝叶斯平均先验票数

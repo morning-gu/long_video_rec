@@ -15,6 +15,12 @@
 - [x] **M4** 完整 Web 界面（海报/推荐理由）+ LLM 层（qwen 重排 + 理由生成，异步缓存可降级）
 - [x] **M4.5** 前端视觉重设计（零依赖：叠层海报/悬停浮层/骨架屏/来源徽标/暗色滚动条/动效）
 - [x] **M5** 自然语言查询、同屏对比视图、评测展示页、演示脚本
+- [x] **M6** 内容理解与图结构：LightGCN 图召回 + LLM 内容画像→语义召回 + DPP 重排
+  + 精排 v2（内容特征）+ **逐通道/重排器/精排版本运行时切换面板**（旧实现全部保留）
+- [ ] **M7** 生成式检索与蒸馏：RQ-VAE 语义 ID + TIGER-lite + 新片冷启动演示 + 蒸馏粗排（当前 CPU 环境可训）
+- [ ] **M8** 规模化与 LLM-native：ML-25M 全量重训 + TALLRec/CoLLM 式 LoRA 微调 + LLM 用户模拟器评估（需 GPU）
+
+> M6–M8 详细规划（算法可行性/资源矩阵/验收标准/风险）见 `docs/路线图_M6-M8.md`。
 
 ## 快速开始（M1–M4）
 
@@ -24,8 +30,9 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env            # 或直接创建 .env 填入 LLM/TMDB key（可选）
 
-python scripts/build.py             # 全量离线构建（首次约 30 分钟，2 核 CPU）
+python scripts/build.py             # 全量离线构建（首次约 50 分钟，2 核 CPU）
 python scripts/enrich_posters.py    # 海报增强（约 15 分钟，可断点续跑，可选）
+python scripts/enrich_profiles.py   # LLM 内容画像（约 40 分钟，M6 语义召回/精排v2 依赖，可选）
 python scripts/run.py               # 启动服务 → http://localhost:8000
 python scripts/eval.py              # 生成评测报告 → docs/评测报告.md
 ```

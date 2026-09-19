@@ -48,7 +48,7 @@ class SASRec(nn.Module):
         返回 [B, L, dim]；因果注意力保证位置 i 只看 ≤i。
         """
         B, L = seq_idx.shape
-        pos = torch.arange(L).unsqueeze(0).expand(B, L)
+        pos = torch.arange(L, device=seq_idx.device).unsqueeze(0).expand(B, L)
         h = self.item_table(seq_idx) + self.pos_emb(pos)
         h = self.encoder(h, mask=self.causal[:L, :L],
                          src_key_padding_mask=~attn_mask)

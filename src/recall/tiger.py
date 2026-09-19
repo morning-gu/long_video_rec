@@ -55,7 +55,7 @@ class Tiger(nn.Module):
     def forward(self, tokens, mask):
         """tokens: [B, T] 右填充 0；mask: [B, T] bool（True=真实）。"""
         B, T = tokens.shape
-        pos = torch.arange(T).unsqueeze(0).expand(B, T)
+        pos = torch.arange(T, device=tokens.device).unsqueeze(0).expand(B, T)
         h = self.tok(tokens) + self.pos(pos)
         h = self.encoder(h, mask=self.causal[:T, :T],
                          src_key_padding_mask=~mask)

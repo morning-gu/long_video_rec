@@ -26,4 +26,6 @@ from src import config
 
 if __name__ == "__main__":
     print(f"数据集 {config.DATASET}，产物目录 {config.ART_DIR}")
-    uvicorn.run("src.serve.app:app", host="127.0.0.1", port=port)
+    host = "0.0.0.0"
+    print(f"服务地址: http://{host}:{port}")
+    uvicorn.run("src.serve.app:app", host=host, port=port)

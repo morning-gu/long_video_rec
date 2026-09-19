@@ -42,13 +42,13 @@ class DeepFM(nn.Module):
     n_dense：v1=6（M3）；v2=8（M6，+内容相似度/基调匹配，见 train_fine）。
     """
 
-    N_FIELDS = 5 + 18
     N_DENSE = 6
 
     def __init__(self, n_users, n_items, n_genres, emb_dim=16,
                  hidden=(128, 64), n_dense=N_DENSE):
         super().__init__()
         self.n_dense = n_dense
+        self.n_fields = 5 + n_genres
         # 字段：user / movie / year / hour / weekend / genre×18（均 0=padding）
         dims = [n_users + 1, n_items + 1, 11, 6, 3] + [n_genres + 1] * n_genres
         self.emb = nn.ModuleList([
@@ -57,7 +57,7 @@ class DeepFM(nn.Module):
             nn.Embedding(d, 1, padding_idx=0) for d in dims])
         self.lin_dense = nn.Linear(n_dense, 1)
         self.mlp = nn.Sequential(
-            nn.Linear(self.N_FIELDS * emb_dim + n_dense, hidden[0]),
+            nn.Linear(self.n_fields * emb_dim + n_dense, hidden[0]),
             nn.ReLU(), nn.Dropout(0.1),
             nn.Linear(hidden[0], hidden[1]), nn.ReLU(),
             nn.Linear(hidden[1], 1))
@@ -88,6 +88,7 @@ class _ItemStats:
         ar = np.arange(1, n_genres + 1)
         self.genre_idx = (genre_mh * ar).astype(np.int64)      # 槽位激活时=类型id
         self.genre_val = genre_mh.astype(np.float32)
+        self.n_fields = 5 + n_genres
         wr = dict(zip(hot_df.movie_id.astype(int), hot_df.wr.astype(float)))
         pc = dict(zip(hot_df.movie_id.astype(int), hot_df.pos_count.astype(int)))
         self.wr = np.array([wr.get(int(m), 3.0) for m in _movie_ids()],
@@ -310,14 +311,14 @@ def _assemble(g, tgt, usr_all, ts_all, hg_all, ht_all, st, activity, ss,
     n = len(g)
     gm = (hg * st.genre_mh[tgt - 1]).sum(1)
     tsim = (ht * st.tt[tgt - 1]).sum(1)
-    idx_mat = np.zeros((n, DeepFM.N_FIELDS), dtype=np.int64)
+    idx_mat = np.zeros((n, st.n_fields), dtype=np.int64)
     idx_mat[:, 0] = usr
     idx_mat[:, 1] = tgt
     idx_mat[:, 2] = st.year[tgt - 1]
     idx_mat[:, 3] = hb
     idx_mat[:, 4] = wk
     idx_mat[:, 5:] = st.genre_idx[tgt - 1]
-    val_mat = np.ones((n, DeepFM.N_FIELDS), dtype=np.float32)
+    val_mat = np.ones((n, st.n_fields), dtype=np.float32)
     val_mat[:, 5:] = st.genre_val[tgt - 1]
     dense = np.stack([activity[usr], gm.astype(np.float32),
                       tsim.astype(np.float32), st.pop_log[tgt - 1],
@@ -429,14 +430,14 @@ class FineRank:
         sas_vec = self._sas_scores(hist_mids)
         sas_sig = (sas_vec[tgt] if sas_vec is not None
                    else np.zeros(n, dtype=np.float32))
-        idx_mat = np.zeros((n, DeepFM.N_FIELDS), dtype=np.int64)
+        idx_mat = np.zeros((n, self.st.n_fields), dtype=np.int64)
         idx_mat[:, 0] = usr
         idx_mat[:, 1] = tgt
         idx_mat[:, 2] = self.st.year[tgt - 1]
         idx_mat[:, 3] = hb
         idx_mat[:, 4] = wk
         idx_mat[:, 5:] = self.st.genre_idx[tgt - 1]
-        val_mat = np.ones((n, DeepFM.N_FIELDS), dtype=np.float32)
+        val_mat = np.ones((n, self.st.n_fields), dtype=np.float32)
         val_mat[:, 5:] = self.st.genre_val[tgt - 1]
         dense = np.stack([
             np.full(n, activity, dtype=np.float32),

@@ -109,11 +109,26 @@ def fine_auc(fine: FineRank, ratings, train_pos, test_pos, movie_ids,
           f"HR@10(1正+99负)={hr10 / len(users):.4f}  (n={len(users)})")
 
 
+def _stage_done(label, *names):
+    """True (and log) if all named artifacts already exist in ART_DIR.
+
+    Lets build.py resume after a crash: completed stages are skipped on
+    the next run instead of retraining from scratch.
+    """
+    if all((config.ART_DIR / n).exists() for n in names):
+        print(f"skip {label} (exists: {', '.join(names)})")
+        return True
+    return False
+
+
 def main() -> None:
     only = _ARGS.stage
 
     if only != "fine":
-        run_pipeline()
+        if not _stage_done("data", "ratings.parquet", "movies.parquet",
+                           "users.parquet", "train_pos.parquet",
+                           "test_pos.parquet"):
+            run_pipeline()
         ratings = pd.read_parquet(config.ART_DIR / "ratings.parquet")
         movies = pd.read_parquet(config.ART_DIR / "movies.parquet")
         train_pos = pd.read_parquet(config.ART_DIR / "train_pos.parquet")
@@ -123,68 +138,87 @@ def main() -> None:
             config.ART_DIR / "users.parquet").user_id.max())
 
         # ---- M1：ItemCF（稠密 / 大规模稀疏 top-K）+ 热门 ----
-        print("building ItemCF similarity ...")
-        sim, _pop = build_sim(train_pos, movie_ids)
-        if config.P["itemcf_topk"] > 0:
-            sparse.save_npz(config.ART_DIR / "itemcf_sim_sparse.npz", sim)
-            print(f"saved itemcf_sim_sparse.npz  "
-                  f"shape={sim.shape} nnz={sim.nnz}")
-        else:
-            np.save(config.ART_DIR / "itemcf_sim.npy", sim)
-            print(f"saved itemcf_sim.npy  shape={sim.shape}")
+        _icf = ("itemcf_sim_sparse.npz"
+                if config.P["itemcf_topk"] > 0 else "itemcf_sim.npy")
+        if not _stage_done("itemcf", _icf):
+            print("building ItemCF similarity ...")
+            sim, _pop = build_sim(train_pos, movie_ids)
+            if config.P["itemcf_topk"] > 0:
+                sparse.save_npz(config.ART_DIR / _icf, sim)
+                print(f"saved {_icf}  shape={sim.shape} nnz={sim.nnz}")
+            else:
+                np.save(config.ART_DIR / _icf, sim)
+                print(f"saved {_icf}  shape={sim.shape}")
 
-        print("building hot lists ...")
-        hot_df = build_hot(ratings, test_pos)
-        hot_df.to_parquet(config.ART_DIR / "hot.parquet")
-        print(f"saved hot.parquet  items={len(hot_df)}")
+        if not _stage_done("hot", "hot.parquet"):
+            print("building hot lists ...")
+            hot_df = build_hot(ratings, test_pos)
+            hot_df.to_parquet(config.ART_DIR / "hot.parquet")
+            print(f"saved hot.parquet  items={len(hot_df)}")
+        else:
+            hot_df = pd.read_parquet(config.ART_DIR / "hot.parquet")
 
         # ---- M2：物品特征 + 双塔 + SASRec ----
-        print("building item features (genre / year) ...")
-        genre_vocab, genre_mh, year_b = build_item_features(movies)
-        np.savez(config.ART_DIR / "item_feats.npz",
-                 genre_multihot=genre_mh, year_bucket=year_b,
-                 genre_vocab=np.array(genre_vocab))
+        if not _stage_done("item_feats", "item_feats.npz"):
+            print("building item features (genre / year) ...")
+            genre_vocab, genre_mh, year_b = build_item_features(movies)
+            np.savez(config.ART_DIR / "item_feats.npz",
+                     genre_multihot=genre_mh, year_bucket=year_b,
+                     genre_vocab=np.array(genre_vocab))
+            print(f"item features: genres={len(genre_vocab)}  users={n_users}")
+        else:
+            _feats = np.load(config.ART_DIR / "item_feats.npz",
+                             allow_pickle=True)
+            genre_mh, year_b = _feats["genre_multihot"], _feats["year_bucket"]
         seqs = positive_sequences(train_pos)
-        print(f"item features: genres={len(genre_vocab)}  users={n_users}")
 
-        print("training two-tower (sampled softmax) ...")
-        tt_model, tt_item_embs = train_twotower(seqs, genre_mh, year_b, n_users)
-        torch.save(tt_model.state_dict(), config.ART_DIR / "twotower.pt")
-        np.save(config.ART_DIR / "tt_item_emb.npy", tt_item_embs)
-        print(f"saved twotower.pt + tt_item_emb.npy  dim={tt_item_embs.shape}")
+        if not _stage_done("twotower", "twotower.pt", "tt_item_emb.npy"):
+            print("training two-tower (sampled softmax) ...")
+            tt_model, tt_item_embs = train_twotower(
+                seqs, genre_mh, year_b, n_users)
+            torch.save(tt_model.state_dict(), config.ART_DIR / "twotower.pt")
+            np.save(config.ART_DIR / "tt_item_emb.npy", tt_item_embs)
+            print(f"saved twotower.pt + tt_item_emb.npy  "
+                  f"dim={tt_item_embs.shape}")
+        else:
+            tt_item_embs = np.load(config.ART_DIR / "tt_item_emb.npy")
 
-        print("training SASRec ...")
-        sas_model = train_sasrec(seqs)
-        torch.save(sas_model.state_dict(), config.ART_DIR / "sasrec.pt")
-        print("saved sasrec.pt")
+        if not _stage_done("sasrec", "sasrec.pt"):
+            print("training SASRec ...")
+            sas_model = train_sasrec(seqs)
+            torch.save(sas_model.state_dict(), config.ART_DIR / "sasrec.pt")
+            print("saved sasrec.pt")
 
         # ---- M6：LightGCN 图召回 ----
-        print("training LightGCN ...")
-        from src.recall.lightgcn import train_lightgcn
-        lg_u, lg_i = train_lightgcn(train_pos, n_users, len(movies))
-        np.save(config.ART_DIR / "lg_user_emb.npy", lg_u)
-        np.save(config.ART_DIR / "lg_item_emb.npy", lg_i)
-        print("saved lg_user_emb.npy + lg_item_emb.npy")
+        if not _stage_done("lightgcn", "lg_user_emb.npy", "lg_item_emb.npy"):
+            print("training LightGCN ...")
+            from src.recall.lightgcn import train_lightgcn
+            lg_u, lg_i = train_lightgcn(train_pos, n_users, len(movies))
+            np.save(config.ART_DIR / "lg_user_emb.npy", lg_u)
+            np.save(config.ART_DIR / "lg_item_emb.npy", lg_i)
+            print("saved lg_user_emb.npy + lg_item_emb.npy")
 
         # ---- M6：内容画像 → 内容向量（依赖 scripts/enrich_profiles.py 先跑；
         #      大规模数据集可选：缺省时语义通道/精排v2 自动跳过）----
         if (config.ART_DIR / "profiles.parquet").exists():
-            from src.data.content import build_content_vectors
-            vec = build_content_vectors()
-            np.save(config.ART_DIR / "content_emb.npy", vec)
-            print(f"saved content_emb.npy  shape={vec.shape}")
+            if not _stage_done("content", "content_emb.npy"):
+                from src.data.content import build_content_vectors
+                vec = build_content_vectors()
+                np.save(config.ART_DIR / "content_emb.npy", vec)
+                print(f"saved content_emb.npy  shape={vec.shape}")
         else:
             print("profiles.parquet 不存在，跳过内容向量"
                   "（如需：python scripts/enrich_profiles.py）")
 
         # ---- M7：RQ-VAE 语义 ID + TIGER-lite 生成式召回 ----
-        print("building RQ-VAE semantic IDs + TIGER-lite ...")
-        from src.data.semantic_id import main as run_rqvae
-        run_rqvae()
-        from src.recall.tiger import train_tiger
-        tiger_model = train_tiger(seqs)
-        torch.save(tiger_model.state_dict(), config.ART_DIR / "tiger.pt")
-        print("saved tiger.pt")
+        if not _stage_done("tiger", "tiger.pt"):
+            print("building RQ-VAE semantic IDs + TIGER-lite ...")
+            from src.data.semantic_id import main as run_rqvae
+            run_rqvae()
+            from src.recall.tiger import train_tiger
+            tiger_model = train_tiger(seqs)
+            torch.save(tiger_model.state_dict(), config.ART_DIR / "tiger.pt")
+            print("saved tiger.pt")
     else:
         # 仅重建精排：加载既有产物
         ratings = pd.read_parquet(config.ART_DIR / "ratings.parquet")
@@ -200,18 +234,21 @@ def main() -> None:
         tt_item_embs = np.load(config.ART_DIR / "tt_item_emb.npy")
 
     # ---- M3/M6：精排 v1（DeepFM）+ v2（+内容特征，需 content_emb.npy）----
-    print("training fine rank v1 (DeepFM) ...")
-    fine_model = train_fine(train_pos, ratings, genre_mh, year_b, tt_item_embs,
-                            hot_df, n_users)
-    torch.save(fine_model.state_dict(), config.ART_DIR / "fine.pt")
-    print("saved fine.pt")
+    if not _stage_done("fine", "fine.pt"):
+        print("training fine rank v1 (DeepFM) ...")
+        fine_model = train_fine(train_pos, ratings, genre_mh, year_b,
+                                tt_item_embs, hot_df, n_users)
+        torch.save(fine_model.state_dict(), config.ART_DIR / "fine.pt")
+        print("saved fine.pt")
     fine_auc(FineRank.load("v1"), ratings, train_pos, test_pos, movie_ids)
     if (config.ART_DIR / "content_emb.npy").exists():
-        print("training fine rank v2 (DeepFM + 内容特征) ...")
-        fine_v2 = train_fine(train_pos, ratings, genre_mh, year_b,
-                             tt_item_embs, hot_df, n_users, with_content=True)
-        torch.save(fine_v2.state_dict(), config.ART_DIR / "fine_v2.pt")
-        print("saved fine_v2.pt")
+        if not _stage_done("fine_v2", "fine_v2.pt"):
+            print("training fine rank v2 (DeepFM + 内容特征) ...")
+            fine_v2 = train_fine(train_pos, ratings, genre_mh, year_b,
+                                 tt_item_embs, hot_df, n_users,
+                                 with_content=True)
+            torch.save(fine_v2.state_dict(), config.ART_DIR / "fine_v2.pt")
+            print("saved fine_v2.pt")
 
     if only != "fine":
         # ---- sanity 评测（走与线上相同的加载路径）----
@@ -239,13 +276,14 @@ def main() -> None:
         sanity_eval(fns, HotRecall(hot_df), ratings, train_pos, test_pos)
 
         # ---- M7：蒸馏粗排（teacher=精排，以真实漏斗候选分布训练）----
-        print("training distilled coarse rank ...")
-        from src.rank.distill import train_distill
-        from src.serve.app import Recommender
-        rec = Recommender(state_db=":memory:")
-        student, _ = train_distill(rec)
-        torch.save(student.state_dict(), config.ART_DIR / "distill.pt")
-        print("saved distill.pt")
+        if not _stage_done("distill", "distill.pt"):
+            print("training distilled coarse rank ...")
+            from src.rank.distill import train_distill
+            from src.serve.app import Recommender
+            rec = Recommender(state_db=":memory:")
+            student, _ = train_distill(rec)
+            torch.save(student.state_dict(), config.ART_DIR / "distill.pt")
+            print("saved distill.pt")
     print("\nbuild done. 启动服务：python scripts/run.py → http://localhost:8000")
     print("评测报告：python scripts/eval.py → docs/评测报告.md")
 

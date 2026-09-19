@@ -345,7 +345,7 @@ class FineRank:
         self.mid2row = {int(m): i for i, m in enumerate(movie_ids)}
         self.st = _ItemStats(genre_mh, year_b, tt_embs, hot_df,
                              content=content, mood=mood)
-        self.sas_model = sas_model
+        self.sas_model = sas_model.eval().to(self.device)
         self.n_users = n_users
         self.with_content = content is not None and model.n_dense == 8
 

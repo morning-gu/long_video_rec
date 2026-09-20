@@ -15,6 +15,7 @@
 产物：data/lora-adapter/（PEFT adapter，服务端 LLM_RANKER_BACKEND=local 加载）。
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# dataloader 多进程 + tokenizers 并行会触发 fork 死锁告警，提前关闭
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 def _parse_args():
@@ -208,6 +211,12 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=8,
         tok.pad_token = tok.eos_token
     from src.device import get_dtype, get_device, bf16_supported
     device = get_device()
+    if device.type != "cuda":
+        print("[warn] 未检测到 CUDA——LLM 在 CPU 上训练会极慢（数小时起）。"
+              "常见原因：torch 编译的 CUDA 版本比驱动新（nvidia-smi 查驱动，"
+              "torch.version.cuda 查编译版本），重装匹配的 cuXXX 构建"
+              "（见 docs/M8-GPU训练指南.md FAQ）。"
+              "如确认要用 CPU 跑请忽略本警告。")
     model = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype=get_dtype(),
         device_map="auto" if device.type == "cuda" else "cpu")

@@ -85,11 +85,11 @@ python scripts/train_lora.py test --dataset ml-25m --compare-api
 
 **换基模**（`--model`，服务端需同步 `.env` 的 `LORA_BASE_MODEL`）：
 ```bash
-# 例：Qwen3.5-0.8B（模板差异已适配：Qwen3 系 thinking 模式自动关闭）
-python scripts/train_lora.py train --dataset ml-25m --model Qwen/Qwen3.5-0.8B-Instruct
-# .env 中同步：LORA_BASE_MODEL=Qwen/Qwen3.5-0.8B-Instruct
+# 例：Qwen3.5-0.8B（无 Instruct 后缀；模板差异已适配：Qwen3 系 thinking 自动关闭）
+python scripts/train_lora.py train --dataset ml-25m --model Qwen/Qwen3.5-0.8B
+# .env 中同步：LORA_BASE_MODEL=Qwen/Qwen3.5-0.8B
 ```
-仓库名以 HuggingFace 实际为准（注意 Instruct 后缀）；跑 `test` 时若告警
+仓库名以 HuggingFace 实际为准；跑 `test` 时若告警
 「是/否非单 token」请反馈（打分逻辑按单 token 设计）。
 
 产物：`data/lora-adapter/`（PEFT adapter）。

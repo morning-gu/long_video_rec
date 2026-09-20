@@ -17,7 +17,7 @@
 - T4 **不支持 bf16**（需 Ampere+）：`src/device.py` 的 `get_dtype()` 自动降级
   fp16（训练与本地 ranker 推理统一走该单点），训练日志会打印
   `dtype=… bf16=False fp16=True` 确认；
-- LoRA 默认 batch 已按 T4 调优：`bs=8 × accum=4`（有效 32，0.8B/1.5B 均舒适），
+- LoRA 默认 batch 已按 T4 调优：`bs=4 × accum=8`（有效 32）+ 梯度检查点，
   并开启 `group_by_length`（按长度分组减少 padding，SFT 提速明显）；
 - 漏斗模型（双塔/SASRec/LightGCN/TIGER/DeepFM）保持 fp32 训练——模型小，
   T4 上 fp32 已足够快且数值更稳；
@@ -139,7 +139,7 @@ python scripts/sim_eval.py 150 --dataset ml-25m           # LLM 用户模拟器�
 | 问题 | 处理 |
 |---|---|
 | **torch 编译 CUDA 比驱动新**（报 "NVIDIA driver too old (found version 120xx)"，`torch.cuda.is_available()` 为 False，训练日志 `device=cpu`） | 驱动 12.x → 装对应 cuXXX 构建：`nvidia-smi` 看驱动支持的最高 CUDA 版本，`python -c "import torch; print(torch.version.cuda)"` 看编译版本；如驱动 12.7 而 torch 是 cu128+：`pip install --force-reinstall "torch==2.6.0" --index-url https://download.pytorch.org/whl/cu126`（cu126 ≤ 驱动版本即可用） |
-| 显存不足（1.5B LoRA） | `--train` 改小 batch：编辑 scripts/train_lora.py 中 bs=2, accum=16；或换 Qwen2.5-0.5B-Instruct（`--model`） |
+| 显存不足（1.5B LoRA） | 已默认开启梯度检查点 + expandable_segments；仍 OOM 则 --bs 2 --accum 16；或换 Qwen2.5-0.5B-Instruct（--model） |
 | HuggingFace 下载失败 | 确认 HF_ENDPOINT=https://hf-mirror.com；或手动下载模型放到本地路径，`--model /path/to/qwen` |
 | ItemCF 稀疏阶段内存爆 | build.py 里 `_build_sim_sparse` 的 block=2048 调小到 1024 |
 | torch 装成 CPU 版 | `python -c "import torch; print(torch.cuda.is_available())"` 应为 True，否则重装 |

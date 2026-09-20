@@ -25,6 +25,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 # dataloader 多进程 + tokenizers 并行会触发 fork 死锁告警，提前关闭
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 
 def _parse_args():
@@ -35,6 +36,10 @@ def _parse_args():
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     ap.add_argument("--n", type=int, default=50000)
     ap.add_argument("--epochs", type=int, default=2)
+    ap.add_argument("--bs", type=int, default=4,
+                    help="per_device_train_batch_size (T4 default 4)")
+    ap.add_argument("--accum", type=int, default=8,
+                    help="gradient_accumulation_steps (effective = bs * accum)")
     ap.add_argument("--compare-api", action="store_true")
     return ap.parse_args()
 
@@ -197,8 +202,8 @@ def _valid_prompts():
         return [json.loads(x) for x in f]
 
 
-def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=8,
-          accum=4, lr=1e-4):
+def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
+          accum=8, lr=1e-4):
     import torch
     from torch.utils.data import Dataset
     from transformers import (Trainer, TrainingArguments,
@@ -220,10 +225,12 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=8,
     model = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype=get_dtype(),
         device_map="auto" if device.type == "cuda" else "cpu")
+    model.config.use_cache = False  # required for gradient checkpointing
     lcfg = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                       target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
                       task_type="CAUSAL_LM")
     model = get_peft_model(model, lcfg)
+    model.enable_input_require_grads()  # required for grad ckpt + LoRA
     model.print_trainable_parameters()
 
     class SFTData(Dataset):
@@ -340,7 +347,7 @@ if __name__ == "__main__":
     if a.mode == "prepare":
         prepare(n_pairs=a.n)
     elif a.mode == "train":
-        train(a.model, epochs=a.epochs)
+        train(a.model, epochs=a.epochs, bs=a.bs, accum=a.accum)
     elif a.mode == "test":
         test(a.model)
         if a.compare_api:

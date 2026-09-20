@@ -1,11 +1,11 @@
 """TALLRec 式 LoRA 微调（M8，文档 03 趋势 7：LLM 后训练 vs 零样本提示）。
 
-三步用法（prepare 可在任意机器跑；train/test 需 GPU）：
+三步用法（prepare 可在任意机器跑；train/test 需 GPU；mode 为位置参数）：
 
-  python scripts/train_lora.py --prepare            # 生成训练数据（本地可跑）
-  python scripts/train_lora.py --train              # LoRA 微调（GPU）
-  python scripts/train_lora.py --test               # held-out AUC（GPU）
-  python scripts/train_lora.py --test --compare-api # 加测 API 零样本对照
+  python scripts/train_lora.py prepare --dataset ml-25m   # 生成训练数据
+  python scripts/train_lora.py train --dataset ml-25m     # LoRA 微调（GPU）
+  python scripts/train_lora.py test --dataset ml-25m      # held-out AUC（GPU）
+  python scripts/train_lora.py test --dataset ml-25m --compare-api  # 加测 API 对照
 
 任务形式（TALLRec 二分类偏好）：输入 = 用户历史 + 候选电影，输出 = "是/否"。
 对照实验：同一验证集上，本地 LoRA 微调模型 vs qwen3.7-plus 零样本提示——
@@ -15,8 +15,6 @@
 产物：data/lora-adapter/（PEFT adapter，服务端 LLM_RANKER_BACKEND=local 加载）。
 """
 import argparse
-import json
-import random
 import sys
 from pathlib import Path
 
@@ -25,10 +23,33 @@ sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+def _parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("mode", choices=["prepare", "train", "test"])
+    ap.add_argument("--dataset", default=None,
+                    help="数据集名（须先完成对应 build），默认 REC_DATASET/ml-1m")
+    ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
+    ap.add_argument("--n", type=int, default=50000)
+    ap.add_argument("--epochs", type=int, default=2)
+    ap.add_argument("--compare-api", action="store_true")
+    return ap.parse_args()
+
+
+_ARGS = _parse_args()
+if _ARGS.dataset:
+    import os
+    os.environ["REC_DATASET"] = _ARGS.dataset
+
+import json
+import random
+
 import numpy as np
 import pandas as pd
 
 from src import config
+
+print(f"数据集 {config.DATASET}（产物目录 {config.ART_DIR}）")
 
 OUT_DIR = ROOT / "data" / "lora"
 ADAPTER_DIR = ROOT / "data" / "lora-adapter"
@@ -262,13 +283,7 @@ def compare_api():
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["prepare", "train", "test"])
-    ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
-    ap.add_argument("--n", type=int, default=50000)
-    ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--compare-api", action="store_true")
-    a = ap.parse_args()
+    a = _ARGS
     if a.mode == "prepare":
         prepare(n_pairs=a.n)
     elif a.mode == "train":

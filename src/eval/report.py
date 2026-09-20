@@ -233,12 +233,14 @@ def run(n_users: int = 1000, seed: int = 42):
                      f"{b['hot']:.4f} |")
     lines += ["", "## 备注", ""] + [f"- {x}" for x in data["notes"]]
 
-    (config.ROOT / "docs" / "评测报告.md").write_text(
+    suffix = "" if config.DATASET == "ml-1m" else f"-{config.DATASET}"
+    (config.ROOT / "docs" / f"评测报告{suffix}.md").write_text(
         "\n".join(lines), encoding="utf-8")
     (config.ART_DIR / "eval_report.json").write_text(
         json_dump(data), encoding="utf-8")
     print("\n".join(lines))
-    print(f"\n报告已写入 docs/评测报告.md + data/artifacts/eval_report.json")
+    print(f"\n报告已写入 docs/评测报告{suffix}.md + "
+          f"{config.ART_DIR / 'eval_report.json'}")
 
 
 def json_dump(data) -> str:

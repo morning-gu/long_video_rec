@@ -8,8 +8,9 @@
 指标：模拟 CTR（点击率）、模拟 NDCG@10、零点击率。
 缓存于 llm_cache；输出 docs/模拟评估报告.md。
 
-用法：python scripts/sim_eval.py [n_users=150]
+用法：python scripts/sim_eval.py [n_users=150] [--dataset ml-25m]
 """
+import argparse
 import json
 import sys
 import time
@@ -20,10 +21,26 @@ sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+def _parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("n_users", nargs="?", type=int, default=150)
+    ap.add_argument("--dataset", default=None,
+                    help="数据集名（须先完成对应 build），默认 REC_DATASET/ml-1m")
+    return ap.parse_args()
+
+
+_ARGS = _parse_args()
+if _ARGS.dataset:
+    import os
+    os.environ["REC_DATASET"] = _ARGS.dataset
+
 import numpy as np
 import pandas as pd
 
 from src import config
+
+print(f"数据集 {config.DATASET}（产物目录 {config.ART_DIR}）")
 from src.llm.service import _extract_json
 
 
@@ -139,7 +156,8 @@ def run(n_users=150, seed=42):
                  "random": "随机（下界）"}[strat]
         lines.append(f"| {label} | {row['sim_ctr']:.4f} | "
                      f"{row['sim_ndcg10']:.4f} | {row['zero_rate']:.4f} |")
-    out = config.ROOT / "docs" / "模拟评估报告.md"
+    suffix = "" if config.DATASET == "ml-1m" else f"-{config.DATASET}"
+    out = config.ROOT / "docs" / f"模拟评估报告{suffix}.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     (config.ART_DIR / "sim_report.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -148,4 +166,4 @@ def run(n_users=150, seed=42):
 
 
 if __name__ == "__main__":
-    run(n_users=int(sys.argv[1]) if len(sys.argv) > 1 else 150)
+    run(n_users=_ARGS.n_users)

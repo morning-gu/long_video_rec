@@ -74,13 +74,13 @@ python scripts/build.py --dataset ml-25m
 
 ```bash
 # 1) 生成训练数据（纯 CPU，分钟级；默认 5 万对，可 --n 调整）
-python scripts/train_lora.py --prepare
+python scripts/train_lora.py prepare --dataset ml-25m
 
 # 2) LoRA 微调（Qwen2.5-1.5B-Instruct，r=16；显存不足见下方 FAQ）
-python scripts/train_lora.py --train
+python scripts/train_lora.py train --dataset ml-25m
 
 # 3) 评测：LoRA vs API 零样本（M8 研究问题：微调是否优于提示词）
-python scripts/train_lora.py --test --compare-api
+python scripts/train_lora.py test --dataset ml-25m --compare-api
 ```
 
 产物：`data/lora-adapter/`（PEFT adapter）。
@@ -95,9 +95,9 @@ python scripts/train_lora.py --test --compare-api
 ## 4. 服务与完整评测（GPU 机器上）
 
 ```bash
-python scripts/run.py --dataset ml-25m --port 8000      # 服务
-python scripts/eval.py                                    # 漏斗逐级评测报告
-python scripts/sim_eval.py 150                            # LLM 用户模拟器（需 .env）
+python scripts/run.py --dataset ml-25m --port 8000       # 服务
+python scripts/eval.py --dataset ml-25m                   # 漏斗逐级评测报告
+python scripts/sim_eval.py 150 --dataset ml-25m           # LLM 用户模拟器（需 .env）
 ```
 
 启用本地 LoRA ranker（在线对照"微调 vs 提示词"）：`.env` 加

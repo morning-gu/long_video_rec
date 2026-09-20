@@ -36,7 +36,13 @@ def get_device() -> torch.device:
 def bf16_supported() -> bool:
     """CUDA bf16 支持（Ampere 及以上）。T4（Turing）为 False → 用 fp16。"""
     d = get_device()
-    return d.type == "cuda" and torch.cuda.is_bf16_supported()
+    if d.type != "cuda":
+        return False
+    try:
+        cap = torch.cuda.get_device_capability(d)
+        return cap[0] >= 8       # Ampere+ has native BF16; T4 (sm_75) does not
+    except Exception:
+        return torch.cuda.is_bf16_supported()
 
 
 def get_dtype() -> torch.dtype:

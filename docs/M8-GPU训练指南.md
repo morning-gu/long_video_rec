@@ -22,7 +22,8 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 # 1) 先装 GPU 版 torch（按 CUDA 版本选，示例为 cu121）
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 
-# 2) 基础依赖 + M8 依赖
+# 2) 基础依赖 + M8 依赖（transformers/peft/accelerate 已钉版本，
+#    避免 v5 重构不兼容；如已装新版：pip install -r requirements-m8.txt --force-reinstall）
 pip install -r requirements.txt -r requirements-m8.txt
 
 # 3) 国内网络访问 HuggingFace 用镜像（Qwen 模型下载）

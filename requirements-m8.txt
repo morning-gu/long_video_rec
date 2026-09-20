@@ -1,6 +1,10 @@
 # M8 GPU 训练额外依赖（在 requirements.txt 基础上）
 # 注意：GPU 机器请先安装匹配 CUDA 的 torch（见 docs/M8-GPU训练指南.md）
-transformers>=4.45
-peft>=0.13
-accelerate
-sentencepiece
+#
+# 版本钉死（==）：transformers v5 重构移除了 TrainingArguments.warmup_ratio
+# 等参数（GPU 机器实测报错）；4.46.x + peft 0.13.x 为已验证的稳定组合。
+# 升级前需回归验证 scripts/train_lora.py 的 train/test 全流程。
+transformers==4.46.3
+peft==0.13.2
+accelerate==1.1.1
+sentencepiece>=0.2.0

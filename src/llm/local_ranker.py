@@ -19,12 +19,13 @@ class LocalLLMRanker:
         import torch
         from peft import PeftModel
         from transformers import AutoModelForCausalLM, AutoTokenizer
+        from src.device import get_device, get_dtype
         self.torch = torch
         self.tok = AutoTokenizer.from_pretrained(adapter_dir)
+        device = get_device()
         self.model = AutoModelForCausalLM.from_pretrained(
-            base_model, torch_dtype=torch.bfloat16 if
-            torch.cuda.is_available() else torch.float32,
-            device_map="auto" if torch.cuda.is_available() else "cpu")
+            base_model, torch_dtype=get_dtype(),
+            device_map="auto" if device.type == "cuda" else "cpu")
         self.model = PeftModel.from_pretrained(self.model, adapter_dir)
         self.model.eval()
         self.history_k = history_k

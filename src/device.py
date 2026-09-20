@@ -31,3 +31,17 @@ def get_device() -> torch.device:
         else:
             _CACHE = torch.device(d)      # cuda / cuda:0 ...
     return _CACHE
+
+
+def bf16_supported() -> bool:
+    """CUDA bf16 支持（Ampere 及以上）。T4（Turing）为 False → 用 fp16。"""
+    d = get_device()
+    return d.type == "cuda" and torch.cuda.is_bf16_supported()
+
+
+def get_dtype() -> torch.dtype:
+    """训练/推理 dtype 单点：bf16（Ampere+）> fp16（Turing，如 T4）> float32。"""
+    d = get_device()
+    if d.type != "cuda":
+        return torch.float32
+    return torch.bfloat16 if bf16_supported() else torch.float16

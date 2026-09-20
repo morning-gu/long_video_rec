@@ -13,6 +13,19 @@
 | 磁盘 | 20GB（数据 1.5GB + 模型产物 + HF 缓存） | 50GB |
 | 网络 | 能访问 files.grouplens.org（下载数据）与 HuggingFace（或镜像） | |
 
+**T4（16GB，Turing）专门说明**——已自动适配：
+- T4 **不支持 bf16**（需 Ampere+）：`src/device.py` 的 `get_dtype()` 自动降级
+  fp16（训练与本地 ranker 推理统一走该单点），训练日志会打印
+  `dtype=… bf16=False fp16=True` 确认；
+- LoRA 默认 batch 已按 T4 调优：`bs=8 × accum=4`（有效 32，0.8B/1.5B 均舒适），
+  并开启 `group_by_length`（按长度分组减少 padding，SFT 提速明显）；
+- 漏斗模型（双塔/SASRec/LightGCN/TIGER/DeepFM）保持 fp32 训练——模型小，
+  T4 上 fp32 已足够快且数值更稳；
+- 若 OOM：`.env` 设 `REC_DEVICE=cpu` 回退 CPU（慢但能跑），或减小 LoRA bs。
+
+各阶段 T4 预计耗时（相对 A10 约 2–3 倍）：ML-25M 全量构建约 **4–8 小时**
+（其中 ItemCF 稀疏为纯 CPU 计算，与显卡无关）；LoRA 0.8B 约 **1–2 小时**。
+
 ## 1. 环境准备
 
 ```bash

@@ -147,10 +147,11 @@ def _load_model(model_name, adapter=False):
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from src.device import get_dtype, get_device
     tok = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype=torch.bfloat16,
-        device_map="auto" if torch.cuda.is_available() else "cpu")
+        model_name, torch_dtype=get_dtype(),
+        device_map="auto" if get_device().type == "cuda" else "cpu")
     if adapter:
         model = PeftModel.from_pretrained(model, ADAPTER_DIR)
     model.eval()
@@ -193,8 +194,8 @@ def _valid_prompts():
         return [json.loads(x) for x in f]
 
 
-def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
-          accum=8, lr=1e-4):
+def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=8,
+          accum=4, lr=1e-4):
     import torch
     from torch.utils.data import Dataset
     from transformers import (Trainer, TrainingArguments,
@@ -205,9 +206,11 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
     tok = AutoTokenizer.from_pretrained(model_name)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    from src.device import get_dtype, get_device, bf16_supported
+    device = get_device()
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype=torch.bfloat16,
-        device_map="auto" if torch.cuda.is_available() else "cpu")
+        model_name, torch_dtype=get_dtype(),
+        device_map="auto" if device.type == "cuda" else "cpu")
     lcfg = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                       target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
                       task_type="CAUSAL_LM")
@@ -248,16 +251,23 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
                  for b in batch]),
         }
 
+    # T4（Turing）不支持 bf16：自动降级 fp16（Ampere+ 用 bf16）
+    use_bf16 = device.type == "cuda" and bf16_supported()
+    use_fp16 = device.type == "cuda" and not use_bf16
     args_kwargs = dict(
         output_dir=str(ADAPTER_DIR), num_train_epochs=epochs,
         per_device_train_batch_size=bs, gradient_accumulation_steps=accum,
         learning_rate=lr, logging_steps=20,
-        save_strategy="no", bf16=torch.cuda.is_available(),
+        save_strategy="no", bf16=use_bf16, fp16=use_fp16,
+        # T4 提速：按长度分组减少 padding 浪费 + 后台加载
+        group_by_length=True, dataloader_num_workers=2,
         report_to=[])
     # warmup_ratio 在部分 transformers 版本（v5 重构 / 老版本）不可用——
     # 逐级降级：ratio → steps → 无 warmup
     import transformers
-    print(f"transformers {transformers.__version__}")
+    print(f"transformers {transformers.__version__}  "
+          f"device={device}  dtype={get_dtype()}"
+          f"  bf16={use_bf16} fp16={use_fp16}")
     for extra in ({"warmup_ratio": 0.03}, {"warmup_steps": 100}, {}):
         try:
             args = TrainingArguments(**extra, **args_kwargs)
@@ -268,6 +278,7 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
                       train_dataset=SFTData(OUT_DIR / "train.jsonl"),
                       data_collator=collate)
     trainer.train()
+    model.to("cpu")                     # 产物落盘前回 CPU（设备无关）
     model.save_pretrained(ADAPTER_DIR)
     tok.save_pretrained(ADAPTER_DIR)
     print(f"adapter 已保存 → {ADAPTER_DIR}")

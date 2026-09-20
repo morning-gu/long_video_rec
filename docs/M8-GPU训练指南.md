@@ -76,12 +76,21 @@ python scripts/build.py --dataset ml-25m
 # 1) 生成训练数据（纯 CPU，分钟级；默认 5 万对，可 --n 调整）
 python scripts/train_lora.py prepare --dataset ml-25m
 
-# 2) LoRA 微调（Qwen2.5-1.5B-Instruct，r=16；显存不足见下方 FAQ）
+# 2) LoRA 微调（默认 Qwen2.5-1.5B-Instruct，r=16；显存不足见下方 FAQ）
 python scripts/train_lora.py train --dataset ml-25m
 
 # 3) 评测：LoRA vs API 零样本（M8 研究问题：微调是否优于提示词）
 python scripts/train_lora.py test --dataset ml-25m --compare-api
 ```
+
+**换基模**（`--model`，服务端需同步 `.env` 的 `LORA_BASE_MODEL`）：
+```bash
+# 例：Qwen3.5-0.8B（模板差异已适配：Qwen3 系 thinking 模式自动关闭）
+python scripts/train_lora.py train --dataset ml-25m --model Qwen/Qwen3.5-0.8B-Instruct
+# .env 中同步：LORA_BASE_MODEL=Qwen/Qwen3.5-0.8B-Instruct
+```
+仓库名以 HuggingFace 实际为准（注意 Instruct 后缀）；跑 `test` 时若告警
+「是/否非单 token」请反馈（打分逻辑按单 token 设计）。
 
 产物：`data/lora-adapter/`（PEFT adapter）。
 

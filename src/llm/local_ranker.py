@@ -28,8 +28,23 @@ class LocalLLMRanker:
         self.model = PeftModel.from_pretrained(self.model, adapter_dir)
         self.model.eval()
         self.history_k = history_k
-        self.yes_id = self.tok.encode("是", add_special_tokens=False)[0]
-        self.no_id = self.tok.encode("否", add_special_tokens=False)[0]
+        yes, no = self.tok.encode("是", add_special_tokens=False), \
+            self.tok.encode("否", add_special_tokens=False)
+        if len(yes) != 1 or len(no) != 1:
+            print(f"[llm-local][warn] 「是/否」非单 token（{yes}/{no}）")
+        self.yes_id, self.no_id = yes[0], no[0]
+
+    def _chat_text(self, messages, add_generation_prompt=False):
+        """Qwen3 系模板关闭 thinking（Qwen2.5 忽略该参数）。"""
+        try:
+            return self.tok.apply_chat_template(
+                messages, tokenize=False,
+                add_generation_prompt=add_generation_prompt,
+                enable_thinking=False)
+        except TypeError:
+            return self.tok.apply_chat_template(
+                messages, tokenize=False,
+                add_generation_prompt=add_generation_prompt)
 
     def rerank(self, history_titles: list, movies: list):
         """movies: [{movie_id, title, genres}]；返回按偏好降序的 movie_id 列表。"""
@@ -41,12 +56,12 @@ class LocalLLMRanker:
             prompts.append(
                 f"【用户历史】（新→旧）\n{hist}\n\n【候选电影】\n{cand}\n\n"
                 '用户会喜欢这部电影吗？只回答"是"或"否"。')
-        texts = [self.tok.apply_chat_template(
-            [{"role": "system", "content":
+        texts = [self._chat_text([
+            {"role": "system", "content":
               "你是影视推荐助手。根据用户的历史观影记录，"
               "判断用户是否会喜欢候选电影。"},
              {"role": "user", "content": p}],
-            tokenize=False, add_generation_prompt=True) for p in prompts]
+            add_generation_prompt=True) for p in prompts]
         diffs = []
         for s in range(0, len(texts), 8):
             enc = self.tok(texts[s:s + 8], return_tensors="pt", padding=True,

@@ -57,6 +57,21 @@ HIST_K = 10
 SYSTEM = "你是影视推荐助手。根据用户的历史观影记录，判断用户是否会喜欢候选电影。"
 
 
+def _chat_text(tok, messages, add_generation_prompt=False):
+    """apply_chat_template 包装：对 Qwen3 系模板关闭 thinking 模式
+    （否则 assistant 回复前会插入 <think> 段，破坏"是/否"首 token 打分
+    与 SFT 标签构造）；Qwen2.5 模板不使用该参数，自动忽略。"""
+    try:
+        return tok.apply_chat_template(
+            messages, tokenize=False,
+            add_generation_prompt=add_generation_prompt,
+            enable_thinking=False)
+    except TypeError:                  # 旧版 transformers 不透传未知参数
+        return tok.apply_chat_template(
+            messages, tokenize=False,
+            add_generation_prompt=add_generation_prompt)
+
+
 def build_prompt(history: list, cand: dict) -> str:
     hist = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(history[:HIST_K]))
     return (f"【用户历史】（新→旧）\n{hist}\n\n"
@@ -142,18 +157,27 @@ def _load_model(model_name, adapter=False):
     return model, tok
 
 
-def _yes_no_logprob(model, tok, prompt: str, batch_size=32):
+def _yes_no_ids(tok):
+    """是/否 token id（打分逻辑假定单 token；多 token 时告警）。"""
+    yes = tok.encode("是", add_special_tokens=False)
+    no = tok.encode("否", add_special_tokens=False)
+    if len(yes) != 1 or len(no) != 1:
+        print(f"[warn] 「是/否」非单 token（{yes} / {no}），"
+              "首 token 打分近似可能不准")
+    return yes[0], no[0]
+
+
+def _yes_no_logprob(model, tok, prompt: list, batch_size=32):
     """批量计算 P("是") 与 P("否") 的首 token logprob。"""
     import torch
-    yes_id = tok.encode("是", add_special_tokens=False)[0]
-    no_id = tok.encode("否", add_special_tokens=False)[0]
+    yes_id, no_id = _yes_no_ids(tok)
     scores = []
     for s in range(0, len(prompt), batch_size):
         chunk = prompt[s:s + batch_size]
-        texts = [tok.apply_chat_template(
-            [{"role": "system", "content": SYSTEM},
-             {"role": "user", "content": p}],
-            tokenize=False, add_generation_prompt=True) for p in chunk]
+        texts = [_chat_text(tok, [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": p}],
+            add_generation_prompt=True) for p in chunk]
         enc = tok(texts, return_tensors="pt", padding=True,
                   padding_side="left", truncation=True, max_length=768).to(
             model.device)
@@ -200,9 +224,8 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
 
         def __getitem__(self, i):
             m = self.rows[i]["messages"]
-            full = tok.apply_chat_template(m, tokenize=False)
-            prompt = tok.apply_chat_template(
-                m[:2], tokenize=False, add_generation_prompt=True)
+            full = _chat_text(tok, m)
+            prompt = _chat_text(tok, m[:2], add_generation_prompt=True)
             full_ids = tok(full, truncation=True, max_length=768)[
                 "input_ids"]
             prompt_len = len(tok(prompt, truncation=True,

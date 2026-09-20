@@ -248,12 +248,22 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
                  for b in batch]),
         }
 
-    args = TrainingArguments(
+    args_kwargs = dict(
         output_dir=str(ADAPTER_DIR), num_train_epochs=epochs,
         per_device_train_batch_size=bs, gradient_accumulation_steps=accum,
-        learning_rate=lr, warmup_ratio=0.03, logging_steps=20,
+        learning_rate=lr, logging_steps=20,
         save_strategy="no", bf16=torch.cuda.is_available(),
         report_to=[])
+    # warmup_ratio 在部分 transformers 版本（v5 重构 / 老版本）不可用——
+    # 逐级降级：ratio → steps → 无 warmup
+    import transformers
+    print(f"transformers {transformers.__version__}")
+    for extra in ({"warmup_ratio": 0.03}, {"warmup_steps": 100}, {}):
+        try:
+            args = TrainingArguments(**extra, **args_kwargs)
+            break
+        except TypeError as e:
+            print(f"[warn] TrainingArguments 不支持 {extra}（{e}），降级重试")
     trainer = Trainer(model=model, args=args,
                       train_dataset=SFTData(OUT_DIR / "train.jsonl"),
                       data_collator=collate)

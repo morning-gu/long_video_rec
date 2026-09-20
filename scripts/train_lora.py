@@ -40,11 +40,15 @@ def _parse_args():
                     help="per_device_train_batch_size (T4 default 4)")
     ap.add_argument("--accum", type=int, default=8,
                     help="gradient_accumulation_steps (effective = bs * accum)")
+    ap.add_argument("--device", type=int, default=None,
+                    help="GPU index (e.g. --device 0; default: all visible GPUs)")
     ap.add_argument("--compare-api", action="store_true")
     return ap.parse_args()
 
 
 _ARGS = _parse_args()
+if _ARGS.device is not None:
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(_ARGS.device)
 if _ARGS.dataset:
     import os
     os.environ["REC_DATASET"] = _ARGS.dataset
@@ -159,7 +163,7 @@ def _load_model(model_name, adapter=False):
     tok = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype=get_dtype(),
-        device_map="auto" if get_device().type == "cuda" else "cpu")
+        device_map=_device_map() if get_device().type == "cuda" else "cpu")
     if adapter:
         model = PeftModel.from_pretrained(model, ADAPTER_DIR)
     model.eval()
@@ -202,6 +206,12 @@ def _valid_prompts():
         return [json.loads(x) for x in f]
 
 
+def _device_map():
+    """Return device_map: DDP local_rank, or auto-split."""
+    lr = os.environ.get("LOCAL_RANK")
+    return {"": int(lr)} if lr is not None else "auto"
+
+
 def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
           accum=8, lr=1e-4):
     import torch
@@ -224,7 +234,7 @@ def train(model_name="Qwen/Qwen2.5-1.5B-Instruct", epochs=2, bs=4,
               "如确认要用 CPU 跑请忽略本警告。")
     model = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype=get_dtype(),
-        device_map="auto" if device.type == "cuda" else "cpu")
+        device_map=_device_map() if device.type == "cuda" else "cpu")
     model.config.use_cache = False  # required for gradient checkpointing
     lcfg = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                       target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],

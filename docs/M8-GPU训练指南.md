@@ -108,6 +108,20 @@ python scripts/train_lora.py train --dataset ml-25m --model Qwen/Qwen3.5-0.8B
 
 产物：`data/lora-adapter/`（PEFT adapter）。
 
+**多卡 GPU 优化**：
+```bash
+# 单卡（推荐：1.5B 模型单卡更快，避免 pipeline 通信开销）
+python scripts/train_lora.py train --dataset ml-25m --device 0
+
+# 双卡数据并行（DDP，有效 batch = bs * accum * GPU 数）
+torchrun --nproc_per_node=2 scripts/train_lora.py train --dataset ml-25m --bs 4 --accum 4
+#  注意：--device 和 torchrun 不要同时用（--device 限制可见 GPU，DDP 需要全部可见）
+
+# 双卡并行实验（各跑不同超参，互不干扰）
+CUDA_VISIBLE_DEVICES=0 python scripts/train_lora.py train --dataset ml-25m --bs 4 --accum 8 &
+CUDA_VISIBLE_DEVICES=1 python scripts/train_lora.py train --dataset ml-25m --bs 4 --accum 8 --model Qwen/Qwen2.5-0.5B-Instruct
+```
+
 **验收标准**：
 - LoRA acc 应 ≥ 0.70（1.5B 在 ML-1M 二分类任务上的合理水平；API 零样本
   参考：待测，预计 0.65–0.80）；
